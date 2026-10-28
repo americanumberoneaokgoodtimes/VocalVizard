@@ -12,12 +12,12 @@ logger = logging.getLogger(__name__)
 class WebSocketManager:
     def __init__(self) -> None:
         self._connections: list[WebSocket] = []
-        # Handlers registered by message type
         self._handlers: dict[str, Callable] = {}
         self._register_defaults()
 
     def _register_defaults(self) -> None:
         self._handlers["ping"] = self._handle_ping
+        self._handlers["open_file"] = self._handle_open_file
 
     async def connect(self, ws: WebSocket) -> None:
         await ws.accept()
@@ -46,6 +46,27 @@ class WebSocketManager:
 
     async def _handle_ping(self, ws: WebSocket, msg: dict) -> None:
         await ws.send_json({"type": "pong"})
+
+    async def _handle_open_file(self, ws: WebSocket, msg: dict) -> None:
+        from vv_io.reader import ChunkedAudioReader
+        from api.routes import set_reader
+
+        path = msg.get("path", "")
+        try:
+            reader = ChunkedAudioReader(path)
+            info = reader.open()
+            set_reader(reader)
+            await ws.send_json({
+                "type": "file_opened",
+                "duration_s": info.duration_s,
+                "sample_rate": info.sample_rate,
+                "channels": info.channels,
+                "format": info.format,
+                "file_id": info.file_id,
+                "num_chunks": reader.num_chunks,
+            })
+        except Exception as exc:
+            await ws.send_json({"type": "error", "message": str(exc)})
 
     # --- handler registration ---
 

@@ -4,29 +4,29 @@ from __future__ import annotations
 import os
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 
 from api.ws import manager
+from api.routes import router as api_router
+from vv_io.cache import ChunkCache
+from api.routes import set_cache
 
 app = FastAPI(title="VocalVizard", version="5.0.0")
 
+# Initialize shared cache
+_cache = ChunkCache(".vocvizard_cache")
+set_cache(_cache)
+
+# Mount REST routes
+app.include_router(api_router)
+
 # ---------------------------------------------------------------------------
-# HTTP endpoints
+# Static file
 # ---------------------------------------------------------------------------
 
 @app.get("/")
 async def serve_frontend() -> FileResponse:
     return FileResponse("VocalVizard.html", media_type="text/html")
-
-
-@app.get("/api/status")
-async def api_status() -> JSONResponse:
-    return JSONResponse({
-        "mode": None,
-        "file_id": None,
-        "progress": 0,
-        "cache_size_mb": 0,
-    })
 
 
 # ---------------------------------------------------------------------------
@@ -42,7 +42,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
             await manager.handle_message(ws, msg)
     except WebSocketDisconnect:
         await manager.disconnect(ws)
-    except Exception as exc:
+    except Exception:
         await manager.disconnect(ws)
         raise
 
