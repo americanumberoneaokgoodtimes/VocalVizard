@@ -158,6 +158,32 @@
     <!-- LEFT SIDEBAR: INGESTION, FORENSIC LPC & PINPOINT MASK CONTROLS -->
     <aside class="w-80 bg-[#080d1a] border-r border-slate-800/90 flex flex-col overflow-y-auto shrink-0 p-2.5 gap-2.5">
 
+      <!-- 0. Processing Mode -->
+      <section class="bg-slate-900/70 border border-cyan-500/30 rounded-lg p-2.5">
+        <h2 class="text-[11px] font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5 mb-2">
+          <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+          Processing Mode
+        </h2>
+        <div class="flex gap-2 mb-1.5">
+          <label class="flex items-center gap-1 cursor-pointer text-[11px] text-slate-300">
+            <input type="radio" name="procMode" value="triage" class="accent-cyan-400"> TRIAGE
+          </label>
+          <label class="flex items-center gap-1 cursor-pointer text-[11px] text-slate-300">
+            <input type="radio" name="procMode" value="atlas" class="accent-cyan-400"> ATLAS
+          </label>
+          <label class="flex items-center gap-1 cursor-pointer text-[11px] text-slate-300">
+            <input type="radio" name="procMode" value="sweep" checked class="accent-cyan-400"> SWEEP
+          </label>
+        </div>
+        <p id="modeDesc" class="text-[10px] text-slate-400 leading-snug">SWEEP: parallel full-pipeline recovery over all chunks.</p>
+        <div id="sweepProgressBar" class="hidden mt-1.5">
+          <div class="h-1.5 bg-slate-800 rounded overflow-hidden">
+            <div id="sweepProgressFill" class="h-full bg-cyan-500 transition-all" style="width:0%"></div>
+          </div>
+          <p id="sweepProgressText" class="text-[10px] font-mono text-slate-400 mt-0.5">0/0 chunks</p>
+        </div>
+      </section>
+
       <!-- 1. Signal Ingestion & Klatt Benchmark Suite -->
       <section class="bg-slate-900/70 border border-slate-800/90 rounded-lg p-2.5">
         <div class="flex items-center justify-between mb-2">
@@ -169,6 +195,10 @@
         </div>
 
         <input type="file" id="fileInputAudio" accept="audio/*,.wav,.mp3,.flac,.ogg,.webm,.raw,.pcm" class="hidden">
+        <div class="flex gap-1.5 mb-1.5">
+          <input type="text" id="filePathInput" placeholder="File path for server…" class="flex-1 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-cyan-400 min-w-0">
+          <button id="btnOpenServer" class="px-2.5 py-1 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 rounded text-[11px] font-semibold transition shrink-0">Open</button>
+        </div>
         <div class="grid grid-cols-3 gap-1.5 mb-2">
           <button id="btnLoadFile" class="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[11px] font-medium border border-slate-700 flex items-center justify-center gap-1 transition">
             <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
@@ -355,6 +385,51 @@
         </div>
       </section>
 
+      <!-- 5. Vocal Recovery Engine -->
+      <section class="bg-slate-900/70 border border-emerald-500/30 rounded-lg p-2.5 space-y-2">
+        <h2 class="text-[11px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+          Vocal Recovery Engine
+        </h2>
+        <div>
+          <label class="block text-[10px] font-mono text-slate-400 mb-1">OUTPUT</label>
+          <div class="flex flex-wrap gap-2">
+            <label class="flex items-center gap-1 cursor-pointer text-[11px] text-slate-300"><input type="radio" name="recovOutput" value="raw" checked class="accent-emerald-400"> RAW</label>
+            <label class="flex items-center gap-1 cursor-pointer text-[11px] text-slate-300"><input type="radio" name="recovOutput" value="path_a" class="accent-emerald-400"> Path A</label>
+            <label class="flex items-center gap-1 cursor-pointer text-[11px] text-slate-300"><input type="radio" name="recovOutput" value="path_b" class="accent-emerald-400"> Path B</label>
+            <label class="flex items-center gap-1 cursor-pointer text-[11px] text-slate-300"><input type="radio" name="recovOutput" value="blend" class="accent-emerald-400"> Blend</label>
+          </div>
+        </div>
+        <div>
+          <label class="block text-[10px] font-mono text-slate-400 mb-1">SYNTHESIS</label>
+          <div class="flex gap-3">
+            <label class="flex items-center gap-1 cursor-pointer text-[11px] text-slate-300"><input type="radio" name="recovSynth" value="generic" checked class="accent-emerald-400"> Generic</label>
+            <label class="flex items-center gap-1 cursor-pointer text-[11px] text-slate-300"><input type="radio" name="recovSynth" value="speaker_match" class="accent-emerald-400"> Speaker Match</label>
+          </div>
+        </div>
+        <div>
+          <label class="block text-[10px] font-mono text-slate-400 mb-1">GAPS</label>
+          <div class="flex gap-3">
+            <label class="flex items-center gap-1 cursor-pointer text-[11px] text-slate-300"><input type="radio" name="recovGaps" value="strict" checked class="accent-emerald-400"> Strict</label>
+            <label class="flex items-center gap-1 cursor-pointer text-[11px] text-slate-300"><input type="radio" name="recovGaps" value="bridge" class="accent-emerald-400"> Bridge</label>
+          </div>
+        </div>
+        <div>
+          <div class="flex justify-between text-[10px] font-mono mb-0.5">
+            <span class="text-slate-400">Path B Threshold</span>
+            <span id="valPathBThresh" class="text-emerald-400">0.28</span>
+          </div>
+          <input type="range" id="sliderPathBThresh" min="0" max="1" step="0.01" value="0.28" class="w-full slider-emerald">
+        </div>
+        <div>
+          <div class="flex justify-between text-[10px] font-mono mb-0.5">
+            <span class="text-slate-400">Blend Ratio (A↔B)</span>
+            <span id="valBlendRatio" class="text-emerald-400">0.50</span>
+          </div>
+          <input type="range" id="sliderBlendRatio" min="0" max="1" step="0.01" value="0.5" class="w-full slider-emerald">
+        </div>
+      </section>
+
     </aside>
 
     <!-- CENTER PANE: MINIMAP, PHONEME RIBBON, SPECTROGRAM & TELEMETRY -->
@@ -393,6 +468,14 @@
         <div class="hidden 2xl:block text-[10px] text-slate-400">
           <span class="text-amber-300 font-semibold">SPACEBAR</span>: Loop 2D ROI (0.5ms delay) &bull; <span class="text-cyan-300 font-semibold">CLICK</span>: Pin LPC Slice
         </div>
+      </div>
+
+      <!-- Voice Event Timeline (VAD + chunk status) -->
+      <div class="h-6 bg-[#050913] border-b border-slate-800/90 flex items-center shrink-0">
+        <div class="w-14 h-full border-r border-slate-800 flex items-center justify-center text-[9px] font-mono font-bold text-amber-300 tracking-tighter shrink-0">
+          VAD
+        </div>
+        <canvas id="voiceTimelineCanvas" class="flex-1 h-full block cursor-pointer"></canvas>
       </div>
 
       <!-- Synchronized Phoneme & Acoustic Event Segmentation Ribbon -->
@@ -3289,10 +3372,219 @@
     }
 
     // =========================================================================
+    // WEBSOCKET CLIENT — connects to FastAPI server at /ws
+    // =========================================================================
+    const MODE_DESCS = {
+      triage: 'TRIAGE: quick VAD scout, then on-demand full pipeline per chunk.',
+      atlas:  'ATLAS: three zoom levels — fast tile first, full pipeline last.',
+      sweep:  'SWEEP: parallel full-pipeline recovery over all chunks.',
+    };
+
+    const serverState = {
+      connected: false,
+      fileId: null,
+      numChunks: 0,
+      chunkDuration: 30,
+      vadTimeline: [],       // flat array of 0..1 scores per 50ms frame
+      chunkReady: new Set(), // chunk indices that are done
+      pathABuffers: {},      // chunk_idx -> Float32Array
+      pathBBuffers: {},      // chunk_idx -> Float32Array
+      recovOutput: 'raw',
+    };
+
+    let ws = null;
+
+    function connectWebSocket() {
+      ws = new WebSocket('ws://localhost:8765/ws');
+      ws.onopen = () => {
+        serverState.connected = true;
+        logMsg('Connected to VocalVizard server.', 'pass');
+        // Send current mode on connect
+        const mode = document.querySelector('input[name="procMode"]:checked')?.value || 'sweep';
+        sendToServer({ type: 'set_mode', mode });
+      };
+      ws.onclose = () => {
+        serverState.connected = false;
+        logMsg('Server disconnected. Run: python server.py', 'warn');
+        setTimeout(connectWebSocket, 3000);
+      };
+      ws.onerror = () => {};
+      ws.onmessage = (e) => {
+        try { handleServerMessage(JSON.parse(e.data)); } catch (_) {}
+      };
+    }
+
+    function sendToServer(msg) {
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+    }
+
+    function handleServerMessage(msg) {
+      switch (msg.type) {
+        case 'pong': break;
+
+        case 'file_opened':
+          serverState.fileId = msg.file_id;
+          serverState.numChunks = msg.num_chunks;
+          serverState.vadTimeline = [];
+          serverState.chunkReady.clear();
+          serverState.pathABuffers = {};
+          serverState.pathBBuffers = {};
+          document.getElementById('hudT').textContent = `${msg.duration_s.toFixed(1)} s`;
+          logMsg(`Server opened file: ${msg.duration_s.toFixed(1)}s, ${msg.sample_rate}Hz, ${msg.channels}ch, ${msg.num_chunks} chunks.`, 'pass');
+          // Set mode after file open
+          const mode = document.querySelector('input[name="procMode"]:checked')?.value || 'sweep';
+          sendToServer({ type: 'set_mode', mode });
+          break;
+
+        case 'mode_set':
+          logMsg(`Processing mode: ${msg.mode.toUpperCase()}.`, 'info');
+          break;
+
+        case 'vad_progress':
+          serverState.vadTimeline.push(...(msg.scores || []));
+          renderVoiceTimeline();
+          break;
+
+        case 'vad_complete':
+          renderVoiceTimeline();
+          break;
+
+        case 'tile_ready':
+        case 'chunk_ready':
+          serverState.chunkReady.add(msg.chunk_idx);
+          renderVoiceTimeline();
+          fetchChunkData(msg.chunk_idx);
+          break;
+
+        case 'sweep_progress': {
+          const pct = msg.total > 0 ? (msg.completed / msg.total * 100) : 0;
+          const bar = document.getElementById('sweepProgressBar');
+          const fill = document.getElementById('sweepProgressFill');
+          const txt = document.getElementById('sweepProgressText');
+          if (bar) bar.classList.remove('hidden');
+          if (fill) fill.style.width = pct.toFixed(1) + '%';
+          if (txt) txt.textContent = `${msg.completed}/${msg.total} chunks`;
+          break;
+        }
+
+        case 'sweep_complete':
+          document.getElementById('sweepProgressBar')?.classList.add('hidden');
+          logMsg(`SWEEP complete — ${msg.total} chunks processed.`, 'pass');
+          break;
+
+        case 'error':
+          logMsg(`Server error: ${msg.message}`, 'warn');
+          break;
+      }
+    }
+
+    async function fetchChunkData(chunkIdx) {
+      if (!serverState.fileId) return;
+      try {
+        const pathAResp = await fetch(`/api/chunk/${chunkIdx}/path_a`);
+        if (pathAResp.ok) {
+          const buf = await pathAResp.arrayBuffer();
+          serverState.pathABuffers[chunkIdx] = new Float32Array(buf);
+        }
+        const pathBResp = await fetch(`/api/chunk/${chunkIdx}/path_b`);
+        if (pathBResp.ok) {
+          const buf = await pathBResp.arrayBuffer();
+          serverState.pathBBuffers[chunkIdx] = new Float32Array(buf);
+        }
+      } catch (_) {}
+    }
+
+    function renderVoiceTimeline() {
+      const canvas = document.getElementById('voiceTimelineCanvas');
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = Math.floor(rect.width) || canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight || 24;
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width, h = canvas.height;
+      ctx.fillStyle = '#050913';
+      ctx.fillRect(0, 0, w, h);
+
+      const vad = serverState.vadTimeline;
+      const numChunks = serverState.numChunks || 1;
+      const totalFrames = Math.max(vad.length, 1);
+
+      // Draw VAD scores
+      for (let i = 0; i < vad.length; i++) {
+        const x = Math.floor(i / totalFrames * w);
+        const score = vad[i];
+        if (score >= 0.7) ctx.fillStyle = '#fbbf24';
+        else if (score >= 0.3) ctx.fillStyle = '#b45309';
+        else ctx.fillStyle = '#1e293b';
+        ctx.fillRect(x, 0, Math.max(1, Math.floor(w / totalFrames)), h);
+      }
+
+      // Overlay chunk-ready tint
+      serverState.chunkReady.forEach(idx => {
+        const x0 = Math.floor(idx / numChunks * w);
+        const x1 = Math.floor((idx + 1) / numChunks * w);
+        ctx.fillStyle = 'rgba(52, 211, 153, 0.25)';
+        ctx.fillRect(x0, 0, x1 - x0, h);
+      });
+    }
+
+    // Wire Vocal Recovery Engine controls
+    function bindRecoveryControls() {
+      function sendRecovery() {
+        const synth = document.querySelector('input[name="recovSynth"]:checked')?.value || 'generic';
+        const gaps = document.querySelector('input[name="recovGaps"]:checked')?.value || 'strict';
+        const thresh = parseFloat(document.getElementById('sliderPathBThresh')?.value || '0.28');
+        const blend = parseFloat(document.getElementById('sliderBlendRatio')?.value || '0.5');
+        serverState.recovOutput = document.querySelector('input[name="recovOutput"]:checked')?.value || 'raw';
+        sendToServer({ type: 'set_recovery', synthesis: synth, gaps, path_b_threshold: thresh, blend_ratio: blend });
+      }
+      document.querySelectorAll('input[name="recovOutput"], input[name="recovSynth"], input[name="recovGaps"]')
+        .forEach(el => el.addEventListener('change', sendRecovery));
+      document.getElementById('sliderPathBThresh')?.addEventListener('input', (e) => {
+        document.getElementById('valPathBThresh').textContent = parseFloat(e.target.value).toFixed(2);
+        sendRecovery();
+      });
+      document.getElementById('sliderBlendRatio')?.addEventListener('input', (e) => {
+        document.getElementById('valBlendRatio').textContent = parseFloat(e.target.value).toFixed(2);
+        sendRecovery();
+      });
+
+      // Processing mode toggle
+      document.querySelectorAll('input[name="procMode"]').forEach(el => {
+        el.addEventListener('change', (e) => {
+          const mode = e.target.value;
+          document.getElementById('modeDesc').textContent = MODE_DESCS[mode] || '';
+          const bar = document.getElementById('sweepProgressBar');
+          if (bar) bar.classList[mode === 'sweep' ? 'remove' : 'add']('hidden');
+          sendToServer({ type: 'set_mode', mode });
+        });
+      });
+
+      // Server file open button
+      document.getElementById('btnOpenServer')?.addEventListener('click', () => {
+        const path = document.getElementById('filePathInput')?.value?.trim();
+        if (!path) { logMsg('Enter a file path to open on the server.', 'warn'); return; }
+        sendToServer({ type: 'open_file', path });
+      });
+
+      // Voice timeline click → request chunk
+      document.getElementById('voiceTimelineCanvas')?.addEventListener('click', (e) => {
+        if (!serverState.numChunks) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        const frac = (e.clientX - rect.left) / rect.width;
+        const chunkIdx = Math.min(Math.floor(frac * serverState.numChunks), serverState.numChunks - 1);
+        sendToServer({ type: 'request_chunk', chunk_idx: chunkIdx, priority: 'high' });
+        logMsg(`Requested chunk ${chunkIdx} (high priority).`, 'info');
+      });
+    }
+
+    // =========================================================================
     // BOOTSTRAP APPLICATION ON LOAD
     // =========================================================================
     window.addEventListener('load', () => {
       bindEventListeners();
+      bindRecoveryControls();
+      connectWebSocket();
       const initialPreset = synthesizeBenchmarkScenario('highgain-room');
       loadAudioSamplesIntoEngine(initialPreset.samples, initialPreset.sr, initialPreset.name, initialPreset.roi);
       renderLPCSliceInspector(Math.floor(state.numFrames * 0.16)); // Show /a/ LPC envelope on boot
