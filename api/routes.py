@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from vv_io.reader import ChunkedAudioReader
 from vv_io.cache import ChunkCache
+from dsp.synthesis import SynthesisParams
 
 router = APIRouter()
 
@@ -18,6 +19,7 @@ router = APIRouter()
 _current_reader: ChunkedAudioReader | None = None
 _current_cache: ChunkCache | None = None
 _current_mode: str | None = None
+_synthesis_params: SynthesisParams = SynthesisParams()
 
 
 def set_reader(reader: ChunkedAudioReader) -> None:
@@ -33,6 +35,11 @@ def set_cache(cache: ChunkCache) -> None:
 def set_mode(mode: str | None) -> None:
     global _current_mode
     _current_mode = mode
+
+
+def set_synthesis_params(params: SynthesisParams) -> None:
+    global _synthesis_params
+    _synthesis_params = params
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +135,6 @@ async def api_chunk_path_a(idx: int) -> Response:
 
     chunk = _current_reader.read_chunk_overlap(idx, overlap_s=5.0)
     result = build_path_a(chunk, _current_reader.target_sr, RecoveryParams())
-    # Trim to single chunk length
     chunk_samples = int(_current_reader.chunk_duration_s * _current_reader.target_sr)
     overlap_samples = int(5.0 * _current_reader.target_sr)
     start = overlap_samples if idx > 0 else 0
@@ -141,4 +147,28 @@ async def api_chunk_path_a(idx: int) -> Response:
 
 @router.get("/api/chunk/{idx}/path_b")
 async def api_chunk_path_b(idx: int) -> Response:
-    raise HTTPException(status_code=404, detail="Path B not yet available — Task 5")
+    if _current_reader is None:
+        raise HTTPException(status_code=400, detail="No file open")
+    import numpy as np
+    from dsp.pipeline import STFTPipeline, AnalysisParams
+    from dsp.lpc import analyze_chunk
+    from dsp.recovery import build_path_a, build_path_b, RecoveryParams
+
+    sr = _current_reader.target_sr
+    chunk = _current_reader.read_chunk_overlap(idx, overlap_s=5.0)
+    path_a = build_path_a(chunk, sr, RecoveryParams())
+
+    pipe = STFTPipeline(AnalysisParams(), sr)
+    stft = pipe.compute(chunk)
+    lpc_list, pitch_list = analyze_chunk(stft, sr)
+
+    result = build_path_b(lpc_list, pitch_list, path_a, sr, _synthesis_params)
+
+    chunk_samples = int(_current_reader.chunk_duration_s * sr)
+    overlap_samples = int(5.0 * sr)
+    start = overlap_samples if idx > 0 else 0
+    trimmed = result[start: start + chunk_samples]
+    return Response(
+        content=trimmed.astype(np.float32).tobytes(),
+        media_type="application/octet-stream",
+    )

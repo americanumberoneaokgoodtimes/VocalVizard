@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable
+from typing import Callable
 
 from fastapi import WebSocket
 
@@ -18,6 +18,7 @@ class WebSocketManager:
     def _register_defaults(self) -> None:
         self._handlers["ping"] = self._handle_ping
         self._handlers["open_file"] = self._handle_open_file
+        self._handlers["set_recovery"] = self._handle_set_recovery
 
     async def connect(self, ws: WebSocket) -> None:
         await ws.accept()
@@ -42,7 +43,7 @@ class WebSocketManager:
         else:
             logger.warning("Unhandled WebSocket message type: %s", msg_type)
 
-    # --- default handlers ---
+    # --- handlers ---
 
     async def _handle_ping(self, ws: WebSocket, msg: dict) -> None:
         await ws.send_json({"type": "pong"})
@@ -68,11 +69,26 @@ class WebSocketManager:
         except Exception as exc:
             await ws.send_json({"type": "error", "message": str(exc)})
 
-    # --- handler registration ---
+    async def _handle_set_recovery(self, ws: WebSocket, msg: dict) -> None:
+        from dsp.synthesis import SynthesisParams
+        from api.routes import set_synthesis_params
+
+        params = SynthesisParams(
+            mode=msg.get("synthesis", "generic"),
+            gaps=msg.get("gaps", "strict"),
+            path_b_threshold=float(msg.get("path_b_threshold", 0.28)),
+            blend_ratio=float(msg.get("blend_ratio", 0.5)),
+        )
+        set_synthesis_params(params)
+        await ws.send_json({"type": "recovery_updated", "params": {
+            "mode": params.mode,
+            "gaps": params.gaps,
+            "path_b_threshold": params.path_b_threshold,
+            "blend_ratio": params.blend_ratio,
+        }})
 
     def register(self, msg_type: str, handler: Callable) -> None:
         self._handlers[msg_type] = handler
 
 
-# Module-level singleton used by server.py
 manager = WebSocketManager()
