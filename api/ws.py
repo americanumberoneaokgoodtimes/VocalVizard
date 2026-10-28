@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from typing import Callable, Optional
 
 from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
+
+# Current active mode instance (set by set_mode handler)
+_current_mode = None
 
 
 class WebSocketManager:
@@ -19,6 +22,9 @@ class WebSocketManager:
         self._handlers["ping"] = self._handle_ping
         self._handlers["open_file"] = self._handle_open_file
         self._handlers["set_recovery"] = self._handle_set_recovery
+        self._handlers["set_mode"] = self._handle_set_mode
+        self._handlers["request_chunk"] = self._handle_request_chunk
+        self._handlers["cancel_chunk"] = self._handle_cancel_chunk
 
     async def connect(self, ws: WebSocket) -> None:
         await ws.accept()
@@ -87,8 +93,87 @@ class WebSocketManager:
             "blend_ratio": params.blend_ratio,
         }})
 
+    async def _handle_set_mode(self, ws: WebSocket, msg: dict) -> None:
+        global _current_mode
+        from api.routes import (
+            _current_reader, _current_cache, _synthesis_params, set_mode
+        )
+        from dsp.pipeline import AnalysisParams
+        from dsp.recovery import RecoveryParams
+
+        mode_name = msg.get("mode", "triage")
+
+        # Cancel previous mode
+        if _current_mode is not None:
+            try:
+                _current_mode.cancel_all()
+            except Exception:
+                pass
+
+        set_mode(mode_name)
+
+        if _current_reader is None:
+            await ws.send_json({"type": "error", "message": "No file open — open a file first"})
+            return
+
+        try:
+            if mode_name == "triage":
+                from modes.triage import TriageMode
+                _current_mode = TriageMode(
+                    _current_reader, _current_cache or _no_cache(),
+                    AnalysisParams(), RecoveryParams(), _synthesis_params,
+                )
+            elif mode_name == "atlas":
+                from modes.atlas import AtlasMode
+                _current_mode = AtlasMode(
+                    _current_reader, _current_cache or _no_cache(),
+                    AnalysisParams(), RecoveryParams(), _synthesis_params,
+                )
+            elif mode_name == "sweep":
+                from modes.sweep import SweepMode
+                _current_mode = SweepMode(
+                    _current_reader, _current_cache or _no_cache(),
+                    AnalysisParams(), RecoveryParams(), _synthesis_params,
+                )
+            else:
+                await ws.send_json({"type": "error", "message": f"Unknown mode: {mode_name}"})
+                return
+
+            send = _make_sender(ws)
+            await _current_mode.on_file_opened(_current_reader, send)
+            await ws.send_json({"type": "mode_set", "mode": mode_name})
+        except Exception as exc:
+            await ws.send_json({"type": "error", "message": str(exc)})
+
+    async def _handle_request_chunk(self, ws: WebSocket, msg: dict) -> None:
+        global _current_mode
+        if _current_mode is None:
+            await ws.send_json({"type": "error", "message": "No active mode"})
+            return
+        chunk_idx = int(msg.get("chunk_idx", 0))
+        priority = msg.get("priority", "normal")
+        send = _make_sender(ws)
+        await _current_mode.on_chunk_requested(chunk_idx, priority, send)
+
+    async def _handle_cancel_chunk(self, ws: WebSocket, msg: dict) -> None:
+        logger.warning("cancel_chunk not yet implemented")
+
     def register(self, msg_type: str, handler: Callable) -> None:
         self._handlers[msg_type] = handler
+
+
+def _make_sender(ws: WebSocket) -> Callable:
+    async def send(msg: dict) -> None:
+        try:
+            await ws.send_json(msg)
+        except Exception:
+            pass
+    return send
+
+
+def _no_cache():
+    from vv_io.cache import ChunkCache
+    return ChunkCache(".vocvizard_cache")
 
 
 manager = WebSocketManager()
