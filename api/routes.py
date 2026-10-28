@@ -77,13 +77,12 @@ async def api_status() -> JSONResponse:
 async def api_chunk_stft(idx: int) -> Response:
     if _current_reader is None:
         raise HTTPException(status_code=400, detail="No file open")
-    from dsp.pipeline import STFTPipeline, AnalysisParams
     import numpy as np
+    from dsp.pipeline import STFTPipeline, AnalysisParams
 
     chunk = _current_reader.read_chunk(idx)
     pipe = STFTPipeline(AnalysisParams(), _current_reader.target_sr)
     result = pipe.compute(chunk)
-    # Serialize: raw_power as flat float32 bytes, prepend shape as 2 int32
     frames, bins = result.raw_power.shape
     header = struct.pack("<ii", frames, bins)
     payload = header + result.raw_power.astype(np.float32).tobytes()
@@ -96,7 +95,6 @@ async def api_chunk_lpc(idx: int) -> JSONResponse:
         raise HTTPException(status_code=400, detail="No file open")
     from dsp.pipeline import STFTPipeline, AnalysisParams
     from dsp.lpc import analyze_chunk
-    import dataclasses
 
     chunk = _current_reader.read_chunk(idx)
     pipe = STFTPipeline(AnalysisParams(), _current_reader.target_sr)
@@ -108,9 +106,9 @@ async def api_chunk_lpc(idx: int) -> JSONResponse:
             return None
         return {"hz": pole.hz, "bw": pole.bw, "prom": pole.prom, "db": pole.db}
 
-    frames = []
+    frames_out = []
     for lpc, pitch in zip(lpc_list, pitch_list):
-        frames.append({
+        frames_out.append({
             "f0": pitch.f0,
             "cpp": pitch.cpp_db,
             "f1": serialize_pole(lpc.f1),
@@ -118,12 +116,27 @@ async def api_chunk_lpc(idx: int) -> JSONResponse:
             "f3": serialize_pole(lpc.f3),
             "f4": serialize_pole(lpc.f4),
         })
-    return JSONResponse({"frames": frames})
+    return JSONResponse({"frames": frames_out})
 
 
 @router.get("/api/chunk/{idx}/path_a")
 async def api_chunk_path_a(idx: int) -> Response:
-    raise HTTPException(status_code=404, detail="Path A not yet available — Task 4")
+    if _current_reader is None:
+        raise HTTPException(status_code=400, detail="No file open")
+    import numpy as np
+    from dsp.recovery import build_path_a, RecoveryParams
+
+    chunk = _current_reader.read_chunk_overlap(idx, overlap_s=5.0)
+    result = build_path_a(chunk, _current_reader.target_sr, RecoveryParams())
+    # Trim to single chunk length
+    chunk_samples = int(_current_reader.chunk_duration_s * _current_reader.target_sr)
+    overlap_samples = int(5.0 * _current_reader.target_sr)
+    start = overlap_samples if idx > 0 else 0
+    trimmed = result[start: start + chunk_samples]
+    return Response(
+        content=trimmed.astype(np.float32).tobytes(),
+        media_type="application/octet-stream",
+    )
 
 
 @router.get("/api/chunk/{idx}/path_b")
