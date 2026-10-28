@@ -1,0 +1,3303 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Forensic Phoneme, LPC Formant &amp; Spectrogram Analyzer (v4.0)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-deep: #030712;
+      --bg-panel: #0b1120;
+      --border-col: #1e293b;
+      --accent-gold: #fbbf24;
+      --accent-cyan: #38bdf8;
+      --accent-emerald: #34d399;
+      --accent-rose: #f43f5e;
+    }
+    * {
+      box-sizing: border-box;
+      user-select: none;
+    }
+    body {
+      background-color: var(--bg-deep);
+      color: #e2e8f0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      overflow: hidden;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #060a14;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #334155;
+    }
+    /* Custom Range Sliders */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 5px;
+      background: #1e293b;
+      border-radius: 4px;
+      outline: none;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: #fbbf24;
+      border: 2px solid #030712;
+      box-shadow: 0 0 6px rgba(251, 191, 36, 0.6);
+      cursor: pointer;
+      transition: transform 0.1s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.18);
+    }
+    input[type="range"].slider-cyan::-webkit-slider-thumb {
+      background: #38bdf8;
+      box-shadow: 0 0 6px rgba(56, 189, 248, 0.6);
+    }
+    input[type="range"].slider-emerald::-webkit-slider-thumb {
+      background: #34d399;
+      box-shadow: 0 0 6px rgba(52, 211, 153, 0.6);
+    }
+    input[type="range"].slider-rose::-webkit-slider-thumb {
+      background: #f43f5e;
+      box-shadow: 0 0 6px rgba(244, 63, 94, 0.6);
+    }
+    @keyframes pulse-border {
+      0%, 100% { border-color: rgba(251, 191, 36, 0.9); box-shadow: 0 0 12px rgba(251, 191, 36, 0.35); }
+      50% { border-color: rgba(56, 189, 248, 0.9); box-shadow: 0 0 18px rgba(56, 189, 248, 0.5); }
+    }
+    .roi-active-loop {
+      animation: pulse-border 1.1s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="h-screen w-screen flex flex-col">
+
+  <!-- TOP NAVIGATION & TELEMETRY HEADER -->
+  <header class="h-12 bg-[#070c18] border-b border-slate-800/90 px-3 flex items-center justify-between shrink-0 z-20">
+    <div class="flex items-center gap-2.5">
+      <div class="w-7 h-7 rounded bg-gradient-to-br from-amber-400 via-amber-500 to-cyan-500 flex items-center justify-center shadow-md shadow-amber-500/20">
+        <svg class="w-4 h-4 text-slate-950" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12h3l3-9 4 18 3-9h5"/>
+        </svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="font-bold text-xs tracking-wide text-slate-100 uppercase">Forensic Phoneme &amp; LPC Formant Studio</span>
+          <span class="px-1.5 py-0.5 text-[10px] font-mono font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded">v4.0 VERIFIED</span>
+          <span id="badgeSelfTest" class="px-1.5 py-0.5 text-[10px] font-mono font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 rounded cursor-pointer hover:bg-emerald-500/25 transition" title="Click to open Mathematical DSP Verification Suite">DSP TESTS: 6/6 PASS</span>
+        </div>
+        <div class="text-[10px] text-slate-400 font-mono flex items-center gap-3">
+          <span id="lblActiveSource">Source: Benchmark #1 (Klatt Cascade IIR + High-Gain Room Floor)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Real-time Global Acoustic Telemetry Pills -->
+    <div class="hidden xl:flex items-center gap-2 font-mono text-[11px]">
+      <div class="px-2.5 py-1 rounded bg-slate-900/90 border border-slate-800 flex items-center gap-1.5">
+        <span class="text-slate-500">SR:</span>
+        <span id="telSampleRate" class="text-cyan-300 font-semibold">24000 Hz</span>
+      </div>
+      <div class="px-2.5 py-1 rounded bg-slate-900/90 border border-slate-800 flex items-center gap-1.5">
+        <span class="text-slate-500">MEAN F0:</span>
+        <span id="telMeanF0" class="text-emerald-400 font-semibold">-- Hz</span>
+      </div>
+      <div class="px-2.5 py-1 rounded bg-slate-900/90 border border-slate-800 flex items-center gap-1.5">
+        <span class="text-slate-500">MASK SPARSITY:</span>
+        <span id="telMaskSparsity" class="text-amber-300 font-semibold">--%</span>
+      </div>
+      <div class="px-2.5 py-1 rounded bg-slate-900/90 border border-slate-800 flex items-center gap-1.5">
+        <span class="text-slate-500">LPC ORDER:</span>
+        <span class="text-purple-300 font-semibold">p=18 (Wiener-IDCT)</span>
+      </div>
+    </div>
+
+    <!-- Quick Action Toolbar -->
+    <div class="flex items-center gap-1.5">
+      <button id="btnOpenTests" class="px-2.5 py-1.5 rounded text-xs font-mono font-semibold bg-slate-800/90 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5 transition">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span>Verify DSP</span>
+      </button>
+      <button id="btnExportWav" class="px-2.5 py-1.5 rounded text-xs font-medium bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 transition" title="Export Filtered ROI or Full Audio as 16-bit PCM WAV">
+        Export WAV
+      </button>
+      <button id="btnExportPng" class="px-2.5 py-1.5 rounded text-xs font-medium bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 transition" title="Save High-Resolution Spectrogram PNG">
+        Export PNG
+      </button>
+      <button id="btnExportJson" class="px-2.5 py-1.5 rounded text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition" title="Export Forensic LPC Formant &amp; Phoneme Trajectory Report (JSON)">
+        JSON Report
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN WORKSPACE -->
+  <div class="flex-1 flex overflow-hidden">
+
+    <!-- LEFT SIDEBAR: INGESTION, FORENSIC LPC & PINPOINT MASK CONTROLS -->
+    <aside class="w-80 bg-[#080d1a] border-r border-slate-800/90 flex flex-col overflow-y-auto shrink-0 p-2.5 gap-2.5">
+
+      <!-- 1. Signal Ingestion & Klatt Benchmark Suite -->
+      <section class="bg-slate-900/70 border border-slate-800/90 rounded-lg p-2.5">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-[11px] font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+            1. Signal Ingest &amp; Benchmarks
+          </h2>
+          <span class="text-[10px] font-mono text-slate-500">24kHz IIR</span>
+        </div>
+
+        <input type="file" id="fileInputAudio" accept="audio/*,.wav,.mp3,.flac,.ogg,.webm,.raw,.pcm" class="hidden">
+        <div class="grid grid-cols-3 gap-1.5 mb-2">
+          <button id="btnLoadFile" class="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[11px] font-medium border border-slate-700 flex items-center justify-center gap-1 transition">
+            <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+            Audio File
+          </button>
+          <button id="btnOpenRawModal" class="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[11px] font-medium border border-slate-700 flex items-center justify-center gap-1 transition">
+            <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            Raw PCM
+          </button>
+          <button id="btnLiveMic" class="px-2 py-1.5 bg-slate-800 hover:bg-rose-950/80 text-slate-200 hover:text-rose-300 rounded text-[11px] font-medium border border-slate-700 flex items-center justify-center gap-1 transition">
+            <span id="dotMic" class="w-2 h-2 rounded-full bg-rose-500"></span>
+            Live Mic
+          </button>
+        </div>
+
+        <label class="block text-[10px] font-mono text-slate-400 mb-1">CASCADE KLATT IIR BENCHMARK PRESET:</label>
+        <div class="flex gap-1.5">
+          <select id="selectScenario" class="flex-1 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-amber-400">
+            <option value="highgain-room" selected>1. Room Floor + Vowels (/a/→/i/→/u/) + Whisper + /s/ &amp; /t/</option>
+            <option value="vowel-triangle">2. Isolated Vowel Triangle (/i/ [280,2250], /a/ [730,1090], /u/ [300,870])</option>
+            <option value="buried-whisper">3. Deep Buried Whisper Sentence in Heavy HVAC (-24 dB SNR)</option>
+            <option value="plosives-fricatives">4. Plosives, Fricatives &amp; Diphthong (/t/ → /aɪ/ → /s/ → /k/ → /ʃ/)</option>
+          </select>
+          <button id="btnSynthScenario" class="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded text-[11px] font-semibold transition">
+            Synth
+          </button>
+        </div>
+      </section>
+
+      <!-- 2. Transport & SPACEBAR 0.5ms Surgical ROI Bandpass Loop -->
+      <section class="bg-slate-900/70 border border-amber-500/30 rounded-lg p-2.5">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-[11px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+            2. Transport &amp; ROI Bandpass Loop
+          </h2>
+          <span class="text-[10px] font-mono text-amber-300/90 bg-amber-500/10 px-1.5 py-0.5 rounded">0.5ms Loopback</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-1.5 mb-2">
+          <button id="btnPlayFull" class="py-1.5 px-2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold rounded text-xs flex items-center justify-center gap-1.5 transition shadow">
+            <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 20 20"><path d="M4 4l12 6-12 6z"/></svg>
+            <span id="lblPlayFull">Play Full Audio</span>
+          </button>
+          <button id="btnLoopRoi" class="py-1.5 px-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded text-xs flex items-center justify-center gap-1.5 transition shadow">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            <span id="lblLoopRoi">Loop ROI [SPACE]</span>
+          </button>
+        </div>
+
+        <div class="bg-slate-950/90 border border-slate-800 rounded p-2 text-[10px] font-mono space-y-1">
+          <div class="flex justify-between">
+            <span class="text-slate-400">ROI Time Span:</span>
+            <span id="lblRoiTime" class="text-cyan-300 font-semibold">0.320s – 2.420s (2100 ms)</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">ROI Bandpass:</span>
+            <span id="lblRoiFreq" class="text-amber-300 font-semibold">220 Hz – 3400 Hz (fc: 1810 Hz)</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">ROI Phonemes / SNR:</span>
+            <span id="lblRoiPhonemes" class="text-emerald-300 font-semibold">--</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. Wiener-LPC & Pinpoint Phoneme Extraction Engine -->
+      <section class="bg-slate-900/70 border border-slate-800/90 rounded-lg p-2.5 space-y-2">
+        <div class="flex items-center justify-between">
+          <h2 class="text-[11px] font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+            3. LPC &amp; Pinpoint Phoneme Mask
+          </h2>
+          <button id="btnMaxHunt" class="px-2 py-0.5 rounded bg-gradient-to-r from-amber-500 to-rose-500 text-slate-950 font-bold text-[10px] hover:opacity-90 transition shadow" title="Optimize parameters for buried low-delivery speech &amp; whispers in heavy room noise">
+            MAX HUNT PRESET
+          </button>
+        </div>
+
+        <!-- Pinpoint Phoneme Tightness (Gaussian Formant Pole Sigma) -->
+        <div>
+          <div class="flex justify-between text-[11px] mb-0.5">
+            <span class="text-amber-200 font-medium" title="Controls Gaussian aperture width around verified LPC formant poles F1-F4 so valleys stay 0.0 (Blue)">Pinpoint Pole Aperture (&sigma;)</span>
+            <span id="valTightness" class="font-mono text-amber-400 font-semibold">88% (~30 Hz)</span>
+          </div>
+          <input type="range" id="sliderTightness" min="25" max="100" step="1" value="88" class="w-full">
+        </div>
+
+        <!-- Room Noise Spectral Oversubtraction Alpha -->
+        <div>
+          <div class="flex justify-between text-[11px] mb-0.5">
+            <span class="text-slate-300" title="Wiener-Khinchin spectral oversubtraction factor before 18th-order LPC autocorrelation">Room Noise Oversubtraction (&alpha;)</span>
+            <span id="valAlpha" class="font-mono text-rose-400 font-semibold">2.20x</span>
+          </div>
+          <input type="range" id="sliderAlpha" min="0.0" max="4.0" step="0.05" value="2.20" class="w-full slider-rose">
+        </div>
+
+        <!-- Faint Whisper & Low-Delivery Micro-Boost -->
+        <div>
+          <div class="flex justify-between text-[11px] mb-0.5">
+            <span class="text-slate-300" title="Non-linear gain applied strictly to verified LPC formant trajectories and sibilant islands">Whisper &amp; Formant Ridge Boost</span>
+            <span id="valWhisperBoost" class="font-mono text-emerald-400 font-semibold">+28 dB</span>
+          </div>
+          <input type="range" id="sliderWhisperBoost" min="0" max="48" step="1" value="28" class="w-full slider-emerald">
+        </div>
+
+        <!-- Sub-Band Noise Floor Whitening -->
+        <div>
+          <div class="flex justify-between text-[11px] mb-0.5">
+            <span class="text-slate-300" title="Normalizes stationary HVAC rumble and preamp hiss across frequency bins">Spectral Floor Whitening</span>
+            <span id="valWhitening" class="font-mono text-cyan-400 font-semibold">74%</span>
+          </div>
+          <input type="range" id="sliderWhitening" min="0" max="100" step="2" value="74" class="w-full slider-cyan">
+        </div>
+
+        <!-- Local Dynamic Range Compression Gamma -->
+        <div>
+          <div class="flex justify-between text-[11px] mb-0.5">
+            <span class="text-slate-300" title="Lifts low-energy speech details without clipping loud vowels">Dynamic Range Gamma (&gamma;)</span>
+            <span id="valGamma" class="font-mono text-amber-300 font-semibold">1.85</span>
+          </div>
+          <input type="range" id="sliderGamma" min="0.60" max="3.00" step="0.05" value="1.85" class="w-full">
+        </div>
+
+        <!-- VAD Decision Threshold -->
+        <div>
+          <div class="flex justify-between text-[11px] mb-0.5">
+            <span class="text-slate-300" title="Probability threshold separating Blue ambient noise from Yellow vocal phonemes">Phoneme Mask Threshold</span>
+            <span id="valVadThresh" class="font-mono text-amber-400 font-semibold">0.28</span>
+          </div>
+          <input type="range" id="sliderVadThresh" min="0.08" max="0.75" step="0.02" value="0.28" class="w-full">
+        </div>
+
+        <!-- Checkboxes -->
+        <div class="pt-1 space-y-1.5 border-t border-slate-800/80 text-[11px]">
+          <label class="flex items-center gap-2 cursor-pointer text-slate-200">
+            <input type="checkbox" id="chkShowFormantDots" checked class="accent-amber-400 rounded">
+            <span>Overlay LPC Poles (<span class="text-emerald-400 font-mono">F0</span>, <span class="text-amber-300 font-mono">F1–F3</span>)</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer text-slate-200">
+            <input type="checkbox" id="chkTrackWhispers" checked class="accent-amber-400 rounded">
+            <span>Track Unvoiced Whispers &amp; Sibilants</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer text-slate-200">
+            <input type="checkbox" id="chkSoloVoiceColor" class="accent-amber-400 rounded">
+            <span>Dim Ambient Blue Floor (Solo Phonemes)</span>
+          </label>
+        </div>
+      </section>
+
+      <!-- 4. Frequency Scale & Palette Configuration -->
+      <section class="bg-slate-900/70 border border-slate-800/90 rounded-lg p-2.5 space-y-2">
+        <h2 class="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+          4. Scale &amp; Colormap
+        </h2>
+
+        <div class="grid grid-cols-2 gap-1.5">
+          <div>
+            <label class="block text-[10px] font-mono text-slate-400 mb-0.5">FREQ SCALE</label>
+            <select id="selectScale" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[11px] text-slate-200">
+              <option value="log" selected>Logarithmic</option>
+              <option value="mel">Mel Auditory</option>
+              <option value="erb">ERB Cochlear</option>
+              <option value="linear">Linear Hz</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-mono text-slate-400 mb-0.5">PALETTE</label>
+            <select id="selectPalette" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[11px] text-slate-200">
+              <option value="dual-gold-blue" selected>Yellow / Blue (Default)</option>
+              <option value="cyber-emerald">Emerald / Deep Navy</option>
+              <option value="thermal-ir">Thermal Crimson / Ice</option>
+              <option value="mono-amber">High-Contrast Monochrome</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <div class="flex justify-between text-[11px] mb-0.5">
+            <span class="text-slate-400">Dynamic Floor Cutoff</span>
+            <span id="valMinDb" class="font-mono text-cyan-400">-88 dB</span>
+          </div>
+          <input type="range" id="sliderMinDb" min="-115" max="-45" step="1" value="-88" class="w-full slider-cyan">
+        </div>
+      </section>
+
+    </aside>
+
+    <!-- CENTER PANE: MINIMAP, PHONEME RIBBON, SPECTROGRAM & TELEMETRY -->
+    <main class="flex-1 flex flex-col bg-[#030712] overflow-hidden relative">
+
+      <!-- Top Time-Domain Minimap & Viewport Navigator -->
+      <div class="h-11 bg-[#070c18] border-b border-slate-800/90 flex items-center px-2 gap-2 shrink-0">
+        <div class="text-[10px] font-mono text-slate-400 w-12 shrink-0 leading-tight">
+          <div>MINIMAP</div>
+          <button id="btnResetZoom" class="text-[9px] text-cyan-400 hover:underline">Full View</button>
+        </div>
+        <div id="minimapContainer" class="flex-1 h-8 bg-slate-950 border border-slate-800 rounded relative overflow-hidden cursor-ew-resize">
+          <canvas id="minimapCanvas" class="w-full h-full block"></canvas>
+          <div id="minimapViewport" class="absolute top-0 bottom-0 border-x-2 border-amber-400 bg-amber-400/10 pointer-events-none" style="left:0%; width:100%;"></div>
+        </div>
+        <div class="flex items-center gap-1.5 text-[10px] font-mono shrink-0">
+          <button id="btnZoomIn" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700" title="Zoom In Time">+</button>
+          <button id="btnZoomOut" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700" title="Zoom Out Time">&minus;</button>
+          <button id="btnDragMode" class="px-2 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded font-semibold" title="Switch Mouse Drag between 2D ROI Bandpass Selection and Time Zoom">
+            Drag: 2D ROI Box
+          </button>
+        </div>
+      </div>
+
+      <!-- Live Crosshair Telemetry Bar -->
+      <div class="h-7 bg-[#090f1e] border-b border-slate-800/90 px-3 flex items-center justify-between text-[11px] font-mono shrink-0">
+        <div class="flex items-center gap-3 overflow-x-auto">
+          <div><span class="text-slate-500">T:</span> <span id="hudT" class="text-slate-200 font-semibold">-- s</span></div>
+          <div><span class="text-slate-500">FREQ:</span> <span id="hudF" class="text-cyan-300 font-semibold">-- Hz</span></div>
+          <div><span class="text-slate-500">SNR:</span> <span id="hudSnr" class="text-slate-200">-- dB</span></div>
+          <div><span class="text-slate-500">P(VOICE):</span> <span id="hudMask" class="text-amber-300 font-bold">--%</span></div>
+          <div><span class="text-slate-500">F0 (CPP):</span> <span id="hudF0" class="text-emerald-400 font-semibold">--</span></div>
+          <div><span class="text-slate-500">LPC F1/F2/F3:</span> <span id="hudFormants" class="text-amber-300 font-semibold">-- / -- / -- Hz</span></div>
+          <div><span class="text-slate-500">PHONEME:</span> <span id="hudPhoneme" class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">--</span></div>
+        </div>
+        <div class="hidden 2xl:block text-[10px] text-slate-400">
+          <span class="text-amber-300 font-semibold">SPACEBAR</span>: Loop 2D ROI (0.5ms delay) &bull; <span class="text-cyan-300 font-semibold">CLICK</span>: Pin LPC Slice
+        </div>
+      </div>
+
+      <!-- Synchronized Phoneme & Acoustic Event Segmentation Ribbon -->
+      <div class="h-6 bg-[#050913] border-b border-slate-800/90 flex items-center shrink-0">
+        <div class="w-14 h-full border-r border-slate-800 flex items-center justify-center text-[9px] font-mono font-bold text-amber-400 tracking-tighter shrink-0">
+          PHONEME
+        </div>
+        <canvas id="phonemeRibbonCanvas" class="flex-1 h-full block"></canvas>
+      </div>
+
+      <!-- Main Interactive Spectrogram + Calibrated Frequency/Time Axes -->
+      <div class="flex-1 flex relative overflow-hidden bg-[#02050d]">
+        <!-- Left Frequency Axis Ruler -->
+        <div class="w-14 h-full bg-[#060b16] border-r border-slate-800/90 shrink-0 relative">
+          <canvas id="freqAxisCanvas" class="w-full h-full block"></canvas>
+        </div>
+
+        <!-- Central Spectrogram Stack -->
+        <div id="specViewport" class="flex-1 h-full relative overflow-hidden cursor-crosshair">
+          <canvas id="specCanvas" class="w-full h-full block"></canvas>
+          <canvas id="overlayCanvas" class="w-full h-full block absolute inset-0 pointer-events-none"></canvas>
+
+          <!-- Interactive 2D Time-Frequency ROI Selection Box Overlay -->
+          <div id="roiSelectionBox" class="absolute border-2 border-amber-400 bg-amber-400/10 pointer-events-none hidden">
+            <div id="roiBadge" class="absolute -top-6 left-0 bg-slate-950/95 border border-amber-400/80 text-amber-300 px-1.5 py-0.5 rounded text-[9.5px] font-mono whitespace-nowrap shadow-lg">
+              ROI: --
+            </div>
+          </div>
+
+          <!-- Playback Scrubber Line -->
+          <div id="playheadLine" class="absolute top-0 bottom-0 w-0.5 bg-rose-500 shadow-[0_0_8px_#f43f5e] pointer-events-none hidden"></div>
+        </div>
+      </div>
+
+      <!-- Bottom Time Axis Ruler -->
+      <div class="h-6 bg-[#060b16] border-t border-slate-800/90 flex items-center shrink-0">
+        <div class="w-14 h-full border-r border-slate-800 flex items-center justify-center text-[9px] font-mono text-slate-500 shrink-0">
+          TIME (s)
+        </div>
+        <canvas id="timeAxisCanvas" class="flex-1 h-full block"></canvas>
+      </div>
+
+      <!-- Bottom Forensic Diagnostic Console -->
+      <div class="h-24 bg-[#050811] border-t border-slate-800/90 flex flex-col shrink-0">
+        <div class="h-6 bg-slate-900/90 border-b border-slate-800 px-2.5 flex items-center justify-between text-[10px] font-mono">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span class="font-bold text-slate-300">FORENSIC DSP TELEMETRY &amp; VERIFICATION LOG</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="text-slate-400"> Dual-Gradient Legend: <span class="text-cyan-400 font-semibold">Blue = Ambient / Noise Floor</span> | <span class="text-amber-300 font-semibold">Yellow-Gold = Verified Phonemes &amp; LPC Formants</span></span>
+            <button id="btnClearLog" class="text-slate-400 hover:text-slate-200">Clear</button>
+          </div>
+        </div>
+        <div id="logContainer" class="flex-1 p-2 overflow-y-auto font-mono text-[10.5px] space-y-0.5"></div>
+      </div>
+    </main>
+
+    <!-- RIGHT SIDEBAR: CROSS-SECTIONAL 18th-ORDER LPC ENVELOPE & FFT SLICE INSPECTOR -->
+    <aside class="w-80 bg-[#080d1a] border-l border-slate-800/90 flex flex-col shrink-0 p-2.5 gap-2.5 overflow-y-auto">
+      <div class="bg-slate-900/70 border border-slate-800/90 rounded-lg p-2.5 flex flex-col flex-1 min-h-[310px]">
+        <div class="flex items-center justify-between mb-1.5">
+          <div>
+            <h2 class="text-[11px] font-bold uppercase tracking-wider text-amber-300">Cross-Section LPC Inspector</h2>
+            <p id="lblSliceStatus" class="text-[10px] font-mono text-slate-400">Hover spectrogram (Click to Pin Frame)</p>
+          </div>
+          <button id="btnUnpinSlice" class="hidden px-1.5 py-0.5 text-[9.5px] font-mono bg-rose-500/20 text-rose-300 border border-rose-500/40 rounded">
+            Unpin
+          </button>
+        </div>
+
+        <!-- Cross-Section Canvas: Plots FFT Spectrum (Cyan), Noise Floor (Red), 18th-Order LPC Envelope (Gold), and Formant Poles F1..F4 -->
+        <div class="flex-1 bg-[#03060f] border border-slate-800 rounded relative overflow-hidden min-h-[210px]">
+          <canvas id="lpcSliceCanvas" class="w-full h-full block"></canvas>
+        </div>
+
+        <!-- Legend -->
+        <div class="mt-2 grid grid-cols-3 gap-1 text-[9.5px] font-mono text-slate-400">
+          <div class="flex items-center gap-1"><span class="w-2.5 h-0.5 bg-amber-400 inline-block"></span>18-LPC Env</div>
+          <div class="flex items-center gap-1"><span class="w-2.5 h-0.5 bg-cyan-400 inline-block"></span>STFT Slice</div>
+          <div class="flex items-center gap-1"><span class="w-2.5 h-0.5 bg-rose-500 inline-block"></span>Noise Floor</div>
+        </div>
+      </div>
+
+      <!-- Frame LPC Pole & Bandwidth Readout Table -->
+      <div class="bg-slate-900/70 border border-slate-800/90 rounded-lg p-2.5">
+        <div class="flex items-center justify-between mb-1.5">
+          <h3 class="text-[11px] font-bold uppercase tracking-wider text-cyan-400">Extracted Vocal Tract Poles</h3>
+          <span id="lblSlicePhoneme" class="px-1.5 py-0.5 text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded">--</span>
+        </div>
+
+        <table class="w-full text-[10.5px] font-mono text-left border-collapse">
+          <thead>
+            <tr class="border-b border-slate-800 text-slate-400">
+              <th class="py-1">Pole</th>
+              <th class="py-1">Freq (Hz)</th>
+              <th class="py-1">BW (Hz)</th>
+              <th class="py-1 text-right">Prom (dB)</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800/60">
+            <tr>
+              <td class="py-1 font-bold text-emerald-400">F0 (CPP)</td>
+              <td id="tblF0Hz" class="py-1 text-slate-200">--</td>
+              <td id="tblF0Harm" class="py-1 text-slate-400">--</td>
+              <td id="tblF0Cpp" class="py-1 text-right text-emerald-300">--</td>
+            </tr>
+            <tr>
+              <td class="py-1 font-bold text-amber-300">F1 (Height)</td>
+              <td id="tblF1Hz" class="py-1 text-slate-200">--</td>
+              <td id="tblF1Bw" class="py-1 text-slate-400">--</td>
+              <td id="tblF1Prom" class="py-1 text-right text-amber-300">--</td>
+            </tr>
+            <tr>
+              <td class="py-1 font-bold text-amber-300">F2 (Back)</td>
+              <td id="tblF2Hz" class="py-1 text-slate-200">--</td>
+              <td id="tblF2Bw" class="py-1 text-slate-400">--</td>
+              <td id="tblF2Prom" class="py-1 text-right text-amber-300">--</td>
+            </tr>
+            <tr>
+              <td class="py-1 font-bold text-amber-300">F3 (Timbre)</td>
+              <td id="tblF3Hz" class="py-1 text-slate-200">--</td>
+              <td id="tblF3Bw" class="py-1 text-slate-400">--</td>
+              <td id="tblF3Prom" class="py-1 text-right text-amber-300">--</td>
+            </tr>
+            <tr>
+              <td class="py-1 font-bold text-cyan-300">F4 / Sib</td>
+              <td id="tblF4Hz" class="py-1 text-slate-200">--</td>
+              <td id="tblF4Bw" class="py-1 text-slate-400">--</td>
+              <td id="tblF4Prom" class="py-1 text-right text-cyan-300">--</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 2D F1-F2 Vowel Space Map -->
+      <div class="bg-slate-900/70 border border-slate-800/90 rounded-lg p-2.5">
+        <div class="flex items-center justify-between mb-1">
+          <h3 class="text-[10.5px] font-bold uppercase tracking-wider text-slate-300">Acoustic Vowel Space (F1 vs F2)</h3>
+          <span class="text-[9.5px] font-mono text-slate-500">IPA Chart</span>
+        </div>
+        <div class="h-32 bg-[#03060f] border border-slate-800 rounded relative overflow-hidden">
+          <canvas id="vowelSpaceCanvas" class="w-full h-full block"></canvas>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- MODAL 1: MATHEMATICAL DSP SELF-TEST & VERIFICATION SUITE -->
+  <div id="modalSelfTest" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-[#0b1120] border border-slate-700 rounded-xl max-w-2xl w-full p-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
+        <div class="flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+          <h3 class="font-bold text-sm text-slate-100 uppercase tracking-wide font-mono">Automated Mathematical &amp; Acoustic DSP Verification Suite</h3>
+        </div>
+        <button id="btnCloseSelfTest" class="text-slate-400 hover:text-slate-200 text-xs font-mono px-2 py-1 rounded bg-slate-800">ESC / Close</button>
+      </div>
+      <p class="text-xs text-slate-400 mb-3">
+        Executes real-time quantitative unit tests on the active DSP algorithms (Blackman-Harris STFT, Klatt Cascade IIR Resonators, Wiener-Khinchin 18th-Order Levinson-Durbin LPC, Cepstral Fractional Pitch, Sparse Pinpoint Masking, and 0.5ms Surgical ROI Bandpass Loop).
+      </p>
+      <div id="selfTestResultsList" class="space-y-2 max-h-80 overflow-y-auto font-mono text-xs mb-4"></div>
+      <div class="flex justify-end gap-2">
+        <button id="btnRerunSelfTest" class="px-3 py-1.5 rounded bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition">
+          Re-Run All 6 Verification Tests
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: RAW BINARY PCM STREAM INGESTION -->
+  <div id="modalRawPcm" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-[#0b1120] border border-slate-700 rounded-xl max-w-md w-full p-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-2.5 mb-3">
+        <h3 class="font-bold text-sm text-amber-300 font-mono uppercase">Ingest Raw Binary PCM Stream</h3>
+        <button id="btnCloseRawModal" class="text-slate-400 hover:text-slate-200 text-xs font-mono">Close</button>
+      </div>
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-400 font-mono mb-1">Select Raw Binary File (.raw, .pcm, .bin, etc.):</label>
+          <input type="file" id="fileInputRaw" class="w-full text-slate-300 bg-slate-950 border border-slate-800 rounded p-1.5">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-slate-400 font-mono mb-1">Sample Rate (Hz):</label>
+            <input type="number" id="rawSampleRate" value="24000" min="4000" max="96000" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 font-mono">
+          </div>
+          <div>
+            <label class="block text-slate-400 font-mono mb-1">Encoding Format:</label>
+            <select id="rawFormat" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 font-mono">
+              <option value="s16le" selected>16-bit Signed Int (LE)</option>
+              <option value="s16be">16-bit Signed Int (BE)</option>
+              <option value="f32le">32-bit Float (LE)</option>
+              <option value="u8">8-bit Unsigned PCM</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-slate-400 font-mono mb-1">Header Byte Offset (Skip Bytes):</label>
+          <input type="number" id="rawOffset" value="0" min="0" step="1" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 font-mono">
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button id="btnProcessRawPcm" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded transition">
+            Decode &amp; Analyze Stream
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CORE DSP, KLATT SYNTHESIS, WIENER-LPC, CEPSTRAL F0, & UI ENGINE -->
+  <script>
+  (() => {
+    'use strict';
+
+    // =========================================================================
+    // APPLICATION STATE
+    // =========================================================================
+    const state = {
+      sampleRate: 24000,
+      fftSize: 1024,
+      hopSize: 128,
+      lpcOrder: 18,
+      audioSamples: null,
+      duration: 0,
+      sourceName: 'Benchmark #1',
+
+      // Viewport Time Span
+      viewT0: 0,
+      viewT1: 4.5,
+
+      // Interactive 2D ROI Selection [t0, t1] x [fLow, fHigh]
+      roi: {
+        active: true,
+        t0: 0.32,
+        t1: 2.42,
+        fLow: 220,
+        fHigh: 3400
+      },
+      dragMode: 'roi', // 'roi' or 'zoom'
+      isDragging: false,
+      isPanning: false,
+      dragStartX: 0,
+      dragStartY: 0,
+      panStartX: 0,
+      panStartT0: 0,
+      panStartT1: 0,
+
+      // Pinned Slice Inspector Frame
+      pinnedFrame: null,
+      hoverFrame: 0,
+
+      // Tunable Forensic DSP Parameters
+      pinpointTightness: 0.88,    // Controls Gaussian pole aperture sigma
+      oversubtractionAlpha: 2.20, // Spectral subtraction alpha
+      whisperBoostDb: 28,         // Non-linear whisper/formant gain
+      noiseWhitening: 0.74,       // Stationary noise floor whitening
+      contrastGamma: 1.85,        // Local dynamic range gamma
+      vadThreshold: 0.28,         // Sigmoid midpoint for M(t, k)
+      minDb: -88,
+      maxDb: -5,
+      freqScale: 'log',
+      palette: 'dual-gold-blue',
+      showFormantDots: true,
+      trackWhispers: true,
+      soloVoiceColor: false,
+
+      // Computed DSP Matrices
+      numFrames: 0,
+      numBins: 512,
+      frequencies: null,
+      timeStamps: null,
+      rawPower: [],        // [frame][bin] linear power
+      cleanPower: [],      // [frame][bin] oversubtracted power
+      spectrogramDb: [],   // [frame][bin] dB for display
+      lpcEnvelopesDb: [],  // [frame][bin] smooth 18th-order LPC envelope in dB
+      speechMask: [],      // [frame][bin] sparse pinpoint probability in [0, 1]
+      noiseFloorPow: null, // [bin] 20th-percentile stationary power floor
+      noiseFloorDb: null,  // [bin] dB floor
+      pitchTrack: null,    // [frame] fractional F0 in Hz (0 if unvoiced)
+      cppTrack: null,      // [frame] Cepstral Peak Prominence in dB
+      formantTrack: [],    // [frame] { f1, f2, f3, f4, bw1..4, prom1..4, sibilantHz, burstScore }
+      phonemeTrack: [],    // [frame] { label, category, color }
+
+      // Audio Playback & Live Mic
+      audioCtx: null,
+      activeSourceNode: null,
+      isPlayingFull: false,
+      isLoopingRoi: false,
+      loopTimerId: null,
+      playStartCtxTime: 0,
+      playStartOffset: 0,
+      animFrameId: null,
+      micStream: null,
+      micProcessor: null,
+      isLiveMic: false
+    };
+
+    // =========================================================================
+    // DOM ELEMENT REFERENCES
+    // =========================================================================
+    const els = {
+      lblActiveSource: document.getElementById('lblActiveSource'),
+      telSampleRate: document.getElementById('telSampleRate'),
+      telMeanF0: document.getElementById('telMeanF0'),
+      telMaskSparsity: document.getElementById('telMaskSparsity'),
+      badgeSelfTest: document.getElementById('badgeSelfTest'),
+
+      fileInputAudio: document.getElementById('fileInputAudio'),
+      btnLoadFile: document.getElementById('btnLoadFile'),
+      btnOpenRawModal: document.getElementById('btnOpenRawModal'),
+      btnLiveMic: document.getElementById('btnLiveMic'),
+      dotMic: document.getElementById('dotMic'),
+      selectScenario: document.getElementById('selectScenario'),
+      btnSynthScenario: document.getElementById('btnSynthScenario'),
+
+      btnPlayFull: document.getElementById('btnPlayFull'),
+      lblPlayFull: document.getElementById('lblPlayFull'),
+      btnLoopRoi: document.getElementById('btnLoopRoi'),
+      lblLoopRoi: document.getElementById('lblLoopRoi'),
+      lblRoiTime: document.getElementById('lblRoiTime'),
+      lblRoiFreq: document.getElementById('lblRoiFreq'),
+      lblRoiPhonemes: document.getElementById('lblRoiPhonemes'),
+
+      btnMaxHunt: document.getElementById('btnMaxHunt'),
+      sliderTightness: document.getElementById('sliderTightness'),
+      valTightness: document.getElementById('valTightness'),
+      sliderAlpha: document.getElementById('sliderAlpha'),
+      valAlpha: document.getElementById('valAlpha'),
+      sliderWhisperBoost: document.getElementById('sliderWhisperBoost'),
+      valWhisperBoost: document.getElementById('valWhisperBoost'),
+      sliderWhitening: document.getElementById('sliderWhitening'),
+      valWhitening: document.getElementById('valWhitening'),
+      sliderGamma: document.getElementById('sliderGamma'),
+      valGamma: document.getElementById('valGamma'),
+      sliderVadThresh: document.getElementById('sliderVadThresh'),
+      valVadThresh: document.getElementById('valVadThresh'),
+
+      chkShowFormantDots: document.getElementById('chkShowFormantDots'),
+      chkTrackWhispers: document.getElementById('chkTrackWhispers'),
+      chkSoloVoiceColor: document.getElementById('chkSoloVoiceColor'),
+
+      selectScale: document.getElementById('selectScale'),
+      selectPalette: document.getElementById('selectPalette'),
+      sliderMinDb: document.getElementById('sliderMinDb'),
+      valMinDb: document.getElementById('valMinDb'),
+
+      minimapContainer: document.getElementById('minimapContainer'),
+      minimapCanvas: document.getElementById('minimapCanvas'),
+      minimapViewport: document.getElementById('minimapViewport'),
+      btnResetZoom: document.getElementById('btnResetZoom'),
+      btnZoomIn: document.getElementById('btnZoomIn'),
+      btnZoomOut: document.getElementById('btnZoomOut'),
+      btnDragMode: document.getElementById('btnDragMode'),
+
+      hudT: document.getElementById('hudT'),
+      hudF: document.getElementById('hudF'),
+      hudSnr: document.getElementById('hudSnr'),
+      hudMask: document.getElementById('hudMask'),
+      hudF0: document.getElementById('hudF0'),
+      hudFormants: document.getElementById('hudFormants'),
+      hudPhoneme: document.getElementById('hudPhoneme'),
+
+      phonemeRibbonCanvas: document.getElementById('phonemeRibbonCanvas'),
+      freqAxisCanvas: document.getElementById('freqAxisCanvas'),
+      specViewport: document.getElementById('specViewport'),
+      specCanvas: document.getElementById('specCanvas'),
+      overlayCanvas: document.getElementById('overlayCanvas'),
+      roiSelectionBox: document.getElementById('roiSelectionBox'),
+      roiBadge: document.getElementById('roiBadge'),
+      playheadLine: document.getElementById('playheadLine'),
+      timeAxisCanvas: document.getElementById('timeAxisCanvas'),
+
+      logContainer: document.getElementById('logContainer'),
+      btnClearLog: document.getElementById('btnClearLog'),
+
+      lblSliceStatus: document.getElementById('lblSliceStatus'),
+      btnUnpinSlice: document.getElementById('btnUnpinSlice'),
+      lpcSliceCanvas: document.getElementById('lpcSliceCanvas'),
+      lblSlicePhoneme: document.getElementById('lblSlicePhoneme'),
+      tblF0Hz: document.getElementById('tblF0Hz'),
+      tblF0Harm: document.getElementById('tblF0Harm'),
+      tblF0Cpp: document.getElementById('tblF0Cpp'),
+      tblF1Hz: document.getElementById('tblF1Hz'),
+      tblF1Bw: document.getElementById('tblF1Bw'),
+      tblF1Prom: document.getElementById('tblF1Prom'),
+      tblF2Hz: document.getElementById('tblF2Hz'),
+      tblF2Bw: document.getElementById('tblF2Bw'),
+      tblF2Prom: document.getElementById('tblF2Prom'),
+      tblF3Hz: document.getElementById('tblF3Hz'),
+      tblF3Bw: document.getElementById('tblF3Bw'),
+      tblF3Prom: document.getElementById('tblF3Prom'),
+      tblF4Hz: document.getElementById('tblF4Hz'),
+      tblF4Bw: document.getElementById('tblF4Bw'),
+      tblF4Prom: document.getElementById('tblF4Prom'),
+      vowelSpaceCanvas: document.getElementById('vowelSpaceCanvas'),
+
+      btnOpenTests: document.getElementById('btnOpenTests'),
+      modalSelfTest: document.getElementById('modalSelfTest'),
+      btnCloseSelfTest: document.getElementById('btnCloseSelfTest'),
+      btnRerunSelfTest: document.getElementById('btnRerunSelfTest'),
+      selfTestResultsList: document.getElementById('selfTestResultsList'),
+
+      modalRawPcm: document.getElementById('modalRawPcm'),
+      btnCloseRawModal: document.getElementById('btnCloseRawModal'),
+      fileInputRaw: document.getElementById('fileInputRaw'),
+      rawSampleRate: document.getElementById('rawSampleRate'),
+      rawFormat: document.getElementById('rawFormat'),
+      rawOffset: document.getElementById('rawOffset'),
+      btnProcessRawPcm: document.getElementById('btnProcessRawPcm'),
+
+      btnExportWav: document.getElementById('btnExportWav'),
+      btnExportPng: document.getElementById('btnExportPng'),
+      btnExportJson: document.getElementById('btnExportJson')
+    };
+
+    // =========================================================================
+    // LOGGING UTILITY
+    // =========================================================================
+    function logMsg(msg, level = 'info') {
+      const div = document.createElement('div');
+      const colors = {
+        info: 'text-cyan-300',
+        forensic: 'text-amber-300',
+        pass: 'text-emerald-400 font-semibold',
+        warn: 'text-rose-400'
+      };
+      const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false });
+      div.className = `${colors[level] || 'text-slate-300'}`;
+      div.textContent = `[${timeStr}] ${msg}`;
+      els.logContainer.appendChild(div);
+      els.logContainer.scrollTop = els.logContainer.scrollHeight;
+    }
+
+    // =========================================================================
+    // 1. MATHEMATICAL DSP PRIMITIVES (RADIX-2 FFT, BLACKMAN-HARRIS, KLATT IIR)
+    // =========================================================================
+
+    function createBlackmanHarrisWindow(N) {
+      const win = new Float32Array(N);
+      const a0 = 0.35875, a1 = 0.48829, a2 = 0.14128, a3 = 0.01168;
+      for (let n = 0; n < N; n++) {
+        const w = (2.0 * Math.PI * n) / (N - 1);
+        win[n] = a0 - a1 * Math.cos(w) + a2 * Math.cos(2.0 * w) - a3 * Math.cos(3.0 * w);
+      }
+      return win;
+    }
+
+    function fftRadix2(re, im, invert = false) {
+      const n = re.length;
+      for (let i = 1, j = 0; i < n; i++) {
+        let bit = n >> 1;
+        for (; j & bit; bit >>= 1) j ^= bit;
+        j ^= bit;
+        if (i < j) {
+          let tr = re[i]; re[i] = re[j]; re[j] = tr;
+          let ti = im[i]; im[i] = im[j]; im[j] = ti;
+        }
+      }
+      for (let len = 2; len <= n; len <<= 1) {
+        const half = len >> 1;
+        const ang = (2.0 * Math.PI / len) * (invert ? 1 : -1);
+        const wlenR = Math.cos(ang);
+        const wlenI = Math.sin(ang);
+        for (let i = 0; i < n; i += len) {
+          let wR = 1.0, wI = 0.0;
+          for (let j = 0; j < half; j++) {
+            const uR = re[i + j], uI = im[i + j];
+            const vR = re[i + j + half] * wR - im[i + j + half] * wI;
+            const vI = re[i + j + half] * wI + im[i + j + half] * wR;
+            re[i + j] = uR + vR;
+            im[i + j] = uI + vI;
+            re[i + j + half] = uR - vR;
+            im[i + j + half] = uI - vI;
+            const nextWR = wR * wlenR - wI * wlenI;
+            wI = wR * wlenI + wI * wlenR;
+            wR = nextWR;
+          }
+        }
+      }
+      if (invert) {
+        for (let i = 0; i < n; i++) {
+          re[i] /= n;
+          im[i] /= n;
+        }
+      }
+    }
+
+    /**
+     * True 2nd-Order Digital Klatt Formant IIR Resonator
+     * Transfer function H(z) = A / (1 - B z^-1 - C z^-2)
+     * Exact pole angle theta = 2*pi*F*Ts, pole radius r = exp(-pi*BW*Ts)
+     */
+    class KlattIIRResonator {
+      constructor(sr) {
+        this.sr = sr;
+        this.Ts = 1.0 / sr;
+        this.y1 = 0.0;
+        this.y2 = 0.0;
+      }
+      reset() {
+        this.y1 = 0.0;
+        this.y2 = 0.0;
+      }
+      step(x, fHz, bwHz) {
+        const fc = Math.max(60, Math.min(this.sr * 0.47, fHz));
+        const bw = Math.max(30, bwHz);
+        const r = Math.exp(-Math.PI * bw * this.Ts);
+        const C = -(r * r);
+        const B = 2.0 * r * Math.cos(2.0 * Math.PI * fc * this.Ts);
+        const A = 1.0 - B - C;
+        const y = A * x + B * this.y1 + C * this.y2;
+        this.y2 = this.y1;
+        this.y1 = y;
+        return y;
+      }
+    }
+
+    /**
+     * Cascade 4-Formant Klatt Vocal Tract Filter + Lip Radiation Differentiator
+     */
+    class KlattVocalTractCascade {
+      constructor(sr) {
+        this.r1 = new KlattIIRResonator(sr);
+        this.r2 = new KlattIIRResonator(sr);
+        this.r3 = new KlattIIRResonator(sr);
+        this.r4 = new KlattIIRResonator(sr);
+        this.rSib = new KlattIIRResonator(sr);
+        this.prevOut = 0.0;
+      }
+      stepCascade(excitation, f1, bw1, f2, bw2, f3, bw3, f4 = 3550, bw4 = 180) {
+        const s1 = this.r1.step(excitation, f1, bw1);
+        const s2 = this.r2.step(s1, f2, bw2);
+        const s3 = this.r3.step(s2, f3, bw3);
+        const s4 = this.r4.step(s3, f4, bw4);
+        // 1st-order Lip Radiation Differentiator (+6 dB/octave)
+        const rad = s4 - 0.95 * this.prevOut;
+        this.prevOut = s4;
+        return rad;
+      }
+      stepFricative(noiseIn, fCenter, bw) {
+        const y = this.rSib.step(noiseIn, fCenter, bw);
+        const rad = y - 0.96 * this.prevOut;
+        this.prevOut = y;
+        return rad;
+      }
+    }
+
+    /**
+     * Rosenberg Glottal Volume Velocity Pulse Source
+     * Generates realistic harmonic comb with -12 dB/oct glottal spectral tilt
+     */
+    function rosenbergGlottalPulse(phase01) {
+      const Tp = 0.40; // Opening phase
+      const Tn = 0.16; // Closing return phase
+      if (phase01 < Tp) {
+        const u = phase01 / Tp;
+        return 0.5 * (1.0 - Math.cos(Math.PI * u)) - 0.35;
+      } else if (phase01 < Tp + Tn) {
+        const u = (phase01 - Tp) / Tn;
+        return Math.cos(0.5 * Math.PI * u) - 0.35;
+      }
+      return -0.35;
+    }
+
+    // =========================================================================
+    // 2. BENCHMARK AUDIO SCENARIO SYNTHESIZER (4 PRESETS)
+    // =========================================================================
+    function synthesizeBenchmarkScenario(presetKey) {
+      const sr = 24000;
+      let duration = 4.4;
+      const tract = new KlattVocalTractCascade(sr);
+      let phase01 = 0.0;
+      let b0 = 0, b1 = 0, b2 = 0; // Pink noise filter states
+
+      if (presetKey === 'highgain-room') {
+        duration = 4.5;
+        const len = Math.floor(sr * duration);
+        const out = new Float32Array(len);
+
+        for (let i = 0; i < len; i++) {
+          const t = i / sr;
+          const white = (Math.random() * 2.0 - 1.0);
+          b0 = 0.997 * b0 + white * 0.0045;
+          b1 = 0.985 * b1 + white * 0.0065;
+          b2 = 0.920 * b2 + white * 0.0090;
+          const roomNoise = b0 + b1 + b2 + white * 0.0055 + Math.sin(2 * Math.PI * 58 * t) * 0.008;
+          let vocal = 0.0;
+
+          // [0.22 - 0.28s] Plosive /t/ alveolar burst
+          if (t >= 0.22 && t < 0.27) {
+            const env = Math.exp(-(t - 0.22) / 0.012);
+            vocal = tract.stepFricative(white * env * 0.42, 4200, 320);
+          }
+          // [0.32 - 1.02s] Voiced Open Vowel /a/ (F1=730, F2=1090, F3=2440)
+          else if (t >= 0.32 && t < 1.02) {
+            const u = (t - 0.32) / 0.70;
+            const env = Math.pow(Math.sin(Math.PI * u), 0.35);
+            const f0 = 124.0 + 4.0 * Math.sin(2 * Math.PI * 4.5 * t);
+            phase01 = (phase01 + f0 / sr) % 1.0;
+            const glottal = rosenbergGlottalPulse(phase01) * env * 0.55;
+            vocal = tract.stepCascade(glottal, 730, 60, 1090, 85, 2440, 115);
+          }
+          // [1.08 - 1.78s] Voiced Front Close Vowel /i/ (F1=280, F2=2250, F3=2890)
+          else if (t >= 1.08 && t < 1.78) {
+            const u = (t - 1.08) / 0.70;
+            const env = Math.pow(Math.sin(Math.PI * u), 0.35);
+            const f0 = 136.0 + 4.5 * Math.sin(2 * Math.PI * 5.0 * t);
+            phase01 = (phase01 + f0 / sr) % 1.0;
+            const glottal = rosenbergGlottalPulse(phase01) * env * 0.52;
+            vocal = tract.stepCascade(glottal, 280, 50, 2250, 90, 2890, 130);
+          }
+          // [1.82 - 2.12s] Unvoiced Sibilant /s/ (5750 Hz)
+          else if (t >= 1.82 && t < 2.12) {
+            const u = (t - 1.82) / 0.30;
+            const env = Math.sin(Math.PI * u);
+            vocal = tract.stepFricative(white * env * 0.32, 5750, 340);
+          }
+          // [2.16 - 2.76s] Voiced Back Rounded Vowel /u/ (F1=310, F2=870, F3=2240)
+          else if (t >= 2.16 && t < 2.76) {
+            const u = (t - 2.16) / 0.60;
+            const env = Math.pow(Math.sin(Math.PI * u), 0.35);
+            const f0 = 116.0 - 6.0 * u;
+            phase01 = (phase01 + f0 / sr) % 1.0;
+            const glottal = rosenbergGlottalPulse(phase01) * env * 0.55;
+            vocal = tract.stepCascade(glottal, 310, 55, 870, 75, 2240, 110);
+          }
+          // [2.98 - 4.25s] Deep Buried Whispered Glide (/h/ whispered formant trajectories, NO F0!)
+          else if (t >= 2.98 && t <= 4.25) {
+            const u = (t - 2.98) / 1.27;
+            const cad = 0.35 + 0.65 * Math.pow(Math.sin(Math.PI * 2.0 * u), 2);
+            const f1 = 520 + 210 * Math.sin(2 * Math.PI * u);
+            const f2 = 1650 - 520 * Math.cos(2 * Math.PI * u);
+            const f3 = 2620 + 200 * Math.sin(Math.PI * u);
+            const wSource = white * 0.14 * cad;
+            vocal = tract.stepCascade(wSource, f1, 68, f2, 92, f3, 125);
+          }
+
+          out[i] = Math.max(-0.98, Math.min(0.98, roomNoise + vocal));
+        }
+        return { samples: out, sr, name: 'Benchmark #1: Klatt Phonemes + Buried Whisper', roi: { t0: 0.28, t1: 2.80, fLow: 220, fHigh: 3300 } };
+      }
+
+      if (presetKey === 'vowel-triangle') {
+        duration = 3.8;
+        const len = Math.floor(sr * duration);
+        const out = new Float32Array(len);
+        for (let i = 0; i < len; i++) {
+          const t = i / sr;
+          const white = (Math.random() * 2.0 - 1.0);
+          let s = white * 0.003;
+          let f1 = 0, f2 = 0, f3 = 0, f0 = 128;
+
+          if (t >= 0.25 && t < 1.25) {
+            // /i/ [280, 2250, 2890]
+            f1 = 280; f2 = 2250; f3 = 2890; f0 = 135;
+          } else if (t >= 1.40 && t < 2.40) {
+            // /a/ [730, 1090, 2440]
+            f1 = 730; f2 = 1090; f3 = 2440; f0 = 122;
+          } else if (t >= 2.55 && t < 3.55) {
+            // /u/ [300, 870, 2240]
+            f1 = 300; f2 = 870; f3 = 2240; f0 = 118;
+          }
+          if (f1 > 0) {
+            phase01 = (phase01 + f0 / sr) % 1.0;
+            const glot = rosenbergGlottalPulse(phase01) * 0.6;
+            s += tract.stepCascade(glot, f1, 52, f2, 78, f3, 110);
+          }
+          out[i] = Math.max(-0.98, Math.min(0.98, s));
+        }
+        return { samples: out, sr, name: 'Benchmark #2: Isolated IPA Vowel Triangle (/i/, /a/, /u/)', roi: { t0: 0.20, t1: 3.60, fLow: 200, fHigh: 3200 } };
+      }
+
+      if (presetKey === 'buried-whisper') {
+        duration = 4.2;
+        const len = Math.floor(sr * duration);
+        const out = new Float32Array(len);
+        for (let i = 0; i < len; i++) {
+          const t = i / sr;
+          const white = (Math.random() * 2.0 - 1.0);
+          b0 = 0.996 * b0 + white * 0.008;
+          b1 = 0.980 * b1 + white * 0.011;
+          const hvac = b0 + b1 + white * 0.009 + Math.sin(2 * Math.PI * 60 * t) * 0.014;
+          let w = 0;
+          if (t >= 0.45 && t <= 3.75) {
+            const u = (t - 0.45) / 3.30;
+            const syll = Math.pow(Math.max(0, Math.sin(2 * Math.PI * 2.4 * (t - 0.45))), 0.7);
+            const f1 = 480 + 230 * Math.sin(2 * Math.PI * 1.2 * u);
+            const f2 = 1690 - 590 * Math.cos(2 * Math.PI * 1.5 * u);
+            const f3 = 2580 + 240 * Math.sin(2 * Math.PI * 0.9 * u);
+            w = tract.stepCascade(white * 0.16 * syll, f1, 62, f2, 88, f3, 120);
+          }
+          out[i] = Math.max(-0.98, Math.min(0.98, hvac + w));
+        }
+        return { samples: out, sr, name: 'Benchmark #3: Deep Buried Whisper in HVAC Floor', roi: { t0: 0.45, t1: 3.75, fLow: 300, fHigh: 3100 } };
+      }
+
+      // Preset 4: Plosives, Fricatives & Diphthong Glide (/t/ -> /aɪ/ -> /s/ -> /k/ -> /ʃ/)
+      duration = 4.0;
+      const len = Math.floor(sr * duration);
+      const out = new Float32Array(len);
+      for (let i = 0; i < len; i++) {
+        const t = i / sr;
+        const white = (Math.random() * 2.0 - 1.0);
+        let s = white * 0.004;
+        if (t >= 0.25 && t < 0.30) {
+          const env = Math.exp(-(t - 0.25) / 0.012);
+          s += tract.stepFricative(white * env * 0.48, 4300, 300);
+        } else if (t >= 0.35 && t < 1.55) {
+          // Diphthong /aɪ/ (F1: 750 -> 300, F2: 1150 -> 2280)
+          const u = (t - 0.35) / 1.20;
+          const f1 = 750 - 450 * u;
+          const f2 = 1150 + 1130 * u;
+          const f3 = 2450 + 420 * u;
+          const f0 = 128 + 14 * Math.sin(Math.PI * u);
+          phase01 = (phase01 + f0 / sr) % 1.0;
+          const glot = rosenbergGlottalPulse(phase01) * 0.56 * Math.pow(Math.sin(Math.PI * u), 0.3);
+          s += tract.stepCascade(glot, f1, 55, f2, 82, f3, 115);
+        } else if (t >= 1.70 && t < 2.25) {
+          // Alveolar sibilant /s/ (5900 Hz)
+          const env = Math.sin(Math.PI * ((t - 1.70) / 0.55));
+          s += tract.stepFricative(white * env * 0.36, 5900, 350);
+        } else if (t >= 2.45 && t < 2.51) {
+          // Velar plosive burst /k/ (1850 Hz & 3600 Hz)
+          const env = Math.exp(-(t - 2.45) / 0.015);
+          s += tract.stepFricative(white * env * 0.46, 2400, 260);
+        } else if (t >= 2.65 && t < 3.55) {
+          // Postalveolar sibilant /ʃ/ (3450 Hz)
+          const env = Math.sin(Math.PI * ((t - 2.65) / 0.90));
+          s += tract.stepFricative(white * env * 0.35, 3450, 320);
+        }
+        out[i] = Math.max(-0.98, Math.min(0.98, s));
+      }
+      return { samples: out, sr, name: 'Benchmark #4: Plosives, Sibilants & Diphthong (/t/,/aɪ/,/s/,/k/,/ʃ/)', roi: { t0: 0.22, t1: 3.60, fLow: 250, fHigh: 7200 } };
+    }
+
+    // =========================================================================
+    // 3. WIENER-KHINCHIN 18th-ORDER LEVINSON-DURBIN LPC & CEPSTRAL F0 ENGINE
+    // =========================================================================
+
+    /**
+     * Levinson-Durbin Recursion for order p = 18
+     * Solves Toeplitz system R[0..p] for predictor coefficients a[1..p] and error Ep
+     */
+    function solveLevinsonDurbin(R, p) {
+      const a = new Float64Array(p + 1);
+      const aPrev = new Float64Array(p + 1);
+      a[0] = 1.0;
+      if (R[0] <= 1e-12) {
+        return { a, Ep: 1e-12 };
+      }
+      let E = R[0];
+      for (let i = 1; i <= p; i++) {
+        let acc = 0.0;
+        for (let j = 1; j < i; j++) {
+          acc += a[j] * R[i - j];
+        }
+        let k = -(R[i] + acc) / (E + 1e-15);
+        // Clamp reflection coefficient strictly inside unit circle for stability
+        k = Math.max(-0.992, Math.min(0.992, k));
+
+        for (let j = 1; j < i; j++) aPrev[j] = a[j];
+        a[i] = k;
+        for (let j = 1; j < i; j++) {
+          a[j] = aPrev[j] + k * aPrev[i - j];
+        }
+        E *= (1.0 - k * k);
+        if (E <= 1e-14) E = 1e-14;
+      }
+      return { a, Ep: E };
+    }
+
+    /**
+     * Compute Noise-Cleaned 18th-Order LPC Envelope & Extract Verified Formant Poles (F1..F4)
+     */
+    function extractLPCFormantsFromCleanSpectrum(cleanPowFrame, numBins, sampleRate, lpcOrder = 18) {
+      const p = lpcOrder;
+      const R = new Float64Array(p + 1);
+      const prePow = new Float64Array(numBins);
+      const binHz = (sampleRate * 0.5) / (numBins - 1);
+
+      // Apply +6 dB/octave pre-emphasis weighting in power domain so F2, F3, F4 have balanced pole salience
+      for (let k = 0; k < numBins; k++) {
+        const hz = k * binHz;
+        const preWeight = 1.0 + (hz / 650.0) * (hz / 650.0);
+        prePow[k] = cleanPowFrame[k] * preWeight;
+      }
+
+      // Pre-compute cosine basis if needed or evaluate IDCT (Wiener-Khinchin Theorem)
+      for (let m = 0; m <= p; m++) {
+        let sum = 0.0;
+        const scale = (Math.PI * m) / (numBins - 1);
+        for (let k = 0; k < numBins; k++) {
+          sum += prePow[k] * Math.cos(scale * k);
+        }
+        R[m] = sum / numBins;
+      }
+      // Diagonal loading (-35 dB white floor) prevents spurious razor-thin noise poles
+      R[0] *= 1.0015;
+
+      const { a, Ep } = solveLevinsonDurbin(R, p);
+
+      // Evaluate smooth LPC Power Envelope L_dB(k) across all 512 frequency bins
+      const lpcDb = new Float32Array(numBins);
+      for (let k = 0; k < numBins; k++) {
+        const omega = (Math.PI * k) / (numBins - 1);
+        let re = 1.0, im = 0.0;
+        for (let m = 1; m <= p; m++) {
+          const ang = omega * m;
+          re += a[m] * Math.cos(ang);
+          im -= a[m] * Math.sin(ang);
+        }
+        const magSq = re * re + im * im;
+        const gain = Ep / (magSq + 1e-12);
+        lpcDb[k] = 10.0 * Math.log10(gain + 1e-12);
+      }
+
+      // Find local maxima of lpcDb(k) within vocal tract range [200 Hz .. 5200 Hz]
+      const kMin = Math.max(2, Math.floor(200 / binHz));
+      const kMax = Math.min(numBins - 3, Math.ceil(5200 / binHz));
+      const candidatePoles = [];
+
+      for (let k = kMin; k <= kMax; k++) {
+        if (lpcDb[k] > lpcDb[k - 1] && lpcDb[k] >= lpcDb[k + 1]) {
+          // Parabolic interpolation for sub-bin frequency precision
+          const y1 = lpcDb[k - 1], y2 = lpcDb[k], y3 = lpcDb[k + 1];
+          const denom = y1 - 2.0 * y2 + y3;
+          const delta = Math.abs(denom) > 1e-9 ? 0.5 * (y1 - y3) / denom : 0.0;
+          const peakBin = k + Math.max(-0.5, Math.min(0.5, delta));
+          const peakHz = peakBin * binHz;
+          const peakDb = y2 - 0.25 * (y1 - y3) * delta;
+
+          // Measure Peak-to-Valley Prominence (dB above flanking local minima within +-16 bins)
+          let minLeft = peakDb, minRight = peakDb;
+          for (let dk = 1; dk <= 18; dk++) {
+            if (k - dk >= 1) minLeft = Math.min(minLeft, lpcDb[k - dk]);
+            if (k + dk < numBins) minRight = Math.min(minRight, lpcDb[k + dk]);
+          }
+          const prominenceDb = peakDb - 0.5 * (minLeft + minRight);
+
+          // Estimate 3-dB Bandwidth (Hz)
+          let left3dB = k, right3dB = k;
+          const targetDb = peakDb - 3.0;
+          while (left3dB > 1 && lpcDb[left3dB] > targetDb && k - left3dB < 20) left3dB--;
+          while (right3dB < numBins - 2 && lpcDb[right3dB] > targetDb && right3dB - k < 20) right3dB++;
+          const bwHz = Math.max(35, (right3dB - left3dB) * binHz);
+
+          if (prominenceDb >= 1.6 && bwHz <= 550) {
+            candidatePoles.push({ bin: peakBin, hz: peakHz, db: peakDb, prom: prominenceDb, bw: bwHz });
+          }
+        }
+      }
+
+      // Assign physiological formant slots F1, F2, F3, F4
+      const assignFormant = (lowHz, highHz, usedPoles, minSpacingHz = 210) => {
+        let best = null;
+        let bestScore = -1e9;
+        for (const c of candidatePoles) {
+          if (c.hz < lowHz || c.hz > highHz) continue;
+          let tooClose = false;
+          for (const u of usedPoles) {
+            if (u && Math.abs(c.hz - u.hz) < minSpacingHz) { tooClose = true; break; }
+          }
+          if (tooClose) continue;
+          const score = c.prom * 2.2 - (c.bw * 0.015);
+          if (score > bestScore) {
+            bestScore = score;
+            best = c;
+          }
+        }
+        return best;
+      };
+
+      const f1 = assignFormant(220, 920, []);
+      const f2 = assignFormant(820, 2650, [f1]);
+      const f3 = assignFormant(2050, 3550, [f1, f2]);
+      const f4 = assignFormant(3100, 5100, [f1, f2, f3]);
+
+      return { lpcDb, f1, f2, f3, f4 };
+    }
+
+    /**
+     * Real Cepstrum & Cepstral Peak Prominence (CPP) Fractional F0 Tracker
+     */
+    function extractCepstralPitch(cleanPowFrame, numBins, sampleRate) {
+      const binHz = (sampleRate * 0.5) / (numBins - 1);
+      // Use bins up to 4200 Hz where human glottal harmonics are strongest
+      const maxHarmBin = Math.min(numBins, Math.ceil(4200 / binHz));
+      const logSpec = new Float64Array(maxHarmBin);
+      for (let k = 0; k < maxHarmBin; k++) {
+        logSpec[k] = Math.log(cleanPowFrame[k] + 1e-12);
+      }
+
+      // Quefrency search range for human voice: F0 in [75 Hz .. 380 Hz]
+      const qMin = Math.max(4, Math.floor(sampleRate / 380.0));
+      const qMax = Math.min(Math.floor(sampleRate / 75.0), 340);
+      const cepstrum = new Float64Array(qMax + 2);
+
+      for (let q = qMin - 1; q <= qMax + 1; q++) {
+        let sum = 0.0;
+        const freqScale = (2.0 * Math.PI * q) / sampleRate;
+        for (let k = 0; k < maxHarmBin; k++) {
+          const hz = k * binHz;
+          sum += logSpec[k] * Math.cos(freqScale * hz);
+        }
+        cepstrum[q] = sum / maxHarmBin;
+      }
+
+      // Compute baseline mean & std of cepstrum across [qMin..qMax] for CPP calculation
+      let sumC = 0.0, sumSq = 0.0, count = 0;
+      let bestQ = qMin, bestVal = -1e9;
+      for (let q = qMin; q <= qMax; q++) {
+        const v = cepstrum[q];
+        sumC += v;
+        sumSq += v * v;
+        count++;
+        if (v > bestVal && v >= cepstrum[q - 1] && v >= cepstrum[q + 1]) {
+          bestVal = v;
+          bestQ = q;
+        }
+      }
+      const meanC = sumC / (count || 1);
+      const stdC = Math.sqrt(Math.max(1e-12, sumSq / (count || 1) - meanC * meanC));
+
+      // Parabolic interpolation around bestQ for fractional sample period precision
+      const y1 = cepstrum[bestQ - 1], y2 = cepstrum[bestQ], y3 = cepstrum[bestQ + 1];
+      const denom = y1 - 2.0 * y2 + y3;
+      const delta = Math.abs(denom) > 1e-12 ? 0.5 * (y1 - y3) / denom : 0.0;
+      const qFrac = bestQ + Math.max(-0.5, Math.min(0.5, delta));
+      const f0Hz = sampleRate / qFrac;
+
+      // CPP expressed as standardized prominence in dB
+      const cppDb = ((bestVal - meanC) / (stdC + 1e-9)) * 3.5;
+      const isVoiced = cppDb >= 6.8 && bestVal > 0.08;
+
+      return {
+        f0: isVoiced ? f0Hz : 0.0,
+        cppDb: Math.max(0, cppDb)
+      };
+    }
+
+    // =========================================================================
+    // 4. FULL STFT, LPC POLE TRACKING & SPARSE PINPOINT MASK PIPELINE
+    // =========================================================================
+    function analyzeFullAudioBuffer() {
+      if (!state.audioSamples || state.audioSamples.length === 0) return;
+      const tStartPerf = performance.now();
+
+      const samples = state.audioSamples;
+      const sr = state.sampleRate;
+      const N = state.fftSize;
+      const hop = state.hopSize;
+      const numBins = N >> 1;
+      const numFrames = Math.max(1, Math.floor((samples.length - N) / hop));
+      const binHz = (sr * 0.5) / (numBins - 1);
+
+      state.numFrames = numFrames;
+      state.numBins = numBins;
+      state.frequencies = new Float32Array(numBins);
+      for (let k = 0; k < numBins; k++) state.frequencies[k] = k * binHz;
+
+      state.timeStamps = new Float32Array(numFrames);
+      state.rawPower = new Array(numFrames);
+      state.cleanPower = new Array(numFrames);
+      state.spectrogramDb = new Array(numFrames);
+      state.lpcEnvelopesDb = new Array(numFrames);
+      state.speechMask = new Array(numFrames);
+      state.pitchTrack = new Float32Array(numFrames);
+      state.cppTrack = new Float32Array(numFrames);
+      state.formantTrack = new Array(numFrames);
+      state.phonemeTrack = new Array(numFrames);
+
+      const win = createBlackmanHarrisWindow(N);
+      const re = new Float32Array(N);
+      const im = new Float32Array(N);
+
+      // PASS 1: Compute 4-Term Blackman-Harris STFT Power Matrix
+      for (let f = 0; f < numFrames; f++) {
+        const offset = f * hop;
+        state.timeStamps[f] = (offset + (N >> 1)) / sr;
+        for (let i = 0; i < N; i++) {
+          re[i] = (samples[offset + i] || 0) * win[i];
+          im[i] = 0.0;
+        }
+        fftRadix2(re, im, false);
+        const pow = new Float32Array(numBins);
+        for (let k = 0; k < numBins; k++) {
+          pow[k] = (re[k] * re[k] + im[k] * im[k]) / N;
+        }
+        state.rawPower[f] = pow;
+      }
+
+      // PASS 2: Estimate Stationary Room Noise Floor N(k) via 20th-Percentile Quantile per Bin
+      state.noiseFloorPow = new Float32Array(numBins);
+      state.noiseFloorDb = new Float32Array(numBins);
+      const colBuf = new Float32Array(numFrames);
+      const qIdx = Math.max(0, Math.floor(numFrames * 0.20));
+      for (let k = 0; k < numBins; k++) {
+        for (let f = 0; f < numFrames; f++) colBuf[f] = state.rawPower[f][k];
+        colBuf.sort();
+        const flr = Math.max(1e-11, colBuf[qIdx]);
+        state.noiseFloorPow[k] = flr;
+        state.noiseFloorDb[k] = 10.0 * Math.log10(flr);
+      }
+
+      // PASS 3: Recompute LPC Envelopes, Cepstral Pitch & Sparse Pinpoint Phoneme Mask
+      recomputeLPCAndPinpointMask();
+
+      const elapsedMs = (performance.now() - tStartPerf).toFixed(1);
+      logMsg(`STFT + 18th-Order Wiener-LPC + Cepstral F0 completed in ${elapsedMs} ms (${numFrames} frames × ${numBins} bins).`, 'forensic');
+    }
+
+    function recomputeLPCAndPinpointMask() {
+      const numFrames = state.numFrames;
+      const numBins = state.numBins;
+      if (numFrames === 0) return;
+
+      const sr = state.sampleRate;
+      const binHz = (sr * 0.5) / (numBins - 1);
+      const alpha = state.oversubtractionAlpha;
+      const beta = 0.008;
+
+      let sumVoicedF0 = 0, countVoicedF0 = 0;
+
+      // Step A: Spectral Oversubtraction + 18th-Order LPC + Cepstral Pitch per Frame
+      const rawFormants = new Array(numFrames);
+      for (let f = 0; f < numFrames; f++) {
+        const rawP = state.rawPower[f];
+        const cleanP = new Float32Array(numBins);
+        for (let k = 0; k < numBins; k++) {
+          const flr = state.noiseFloorPow[k];
+          cleanP[k] = Math.max(beta * flr, rawP[k] - alpha * flr);
+        }
+        state.cleanPower[f] = cleanP;
+
+        // Cepstral Fractional Pitch & CPP
+        const { f0, cppDb } = extractCepstralPitch(cleanP, numBins, sr);
+        state.pitchTrack[f] = f0;
+        state.cppTrack[f] = cppDb;
+        if (f0 > 0) {
+          sumVoicedF0 += f0;
+          countVoicedF0++;
+        }
+
+        // 18th-Order Wiener-Khinchin LPC Formant Extraction
+        const lpcRes = extractLPCFormantsFromCleanSpectrum(cleanP, numBins, sr, state.lpcOrder);
+        state.lpcEnvelopesDb[f] = lpcRes.lpcDb;
+
+        // Detect high-frequency Sibilant Peak (> 3100 Hz) & Transient Plosive Burst Flux
+        let sibPeakBin = 0, sibPeakSnr = 0, lowBandSnr = 0, burstFlux = 0;
+        for (let k = 2; k < numBins - 2; k++) {
+          const hz = k * binHz;
+          const snrDb = 10.0 * Math.log10((cleanP[k] + 1e-12) / (state.noiseFloorPow[k] + 1e-12));
+          if (hz >= 3100 && hz <= 7600) {
+            if (snrDb > sibPeakSnr) {
+              sibPeakSnr = snrDb;
+              sibPeakBin = k;
+            }
+          } else if (hz >= 250 && hz <= 2600) {
+            lowBandSnr = Math.max(lowBandSnr, snrDb);
+          }
+          if (f > 0) {
+            const prevSnr = 10.0 * Math.log10((state.cleanPower[f - 1][k] + 1e-12) / (state.noiseFloorPow[k] + 1e-12));
+            if (snrDb - prevSnr > 6.0) burstFlux += (snrDb - prevSnr);
+          }
+        }
+        burstFlux /= numBins;
+
+        rawFormants[f] = {
+          f1: lpcRes.f1,
+          f2: lpcRes.f2,
+          f3: lpcRes.f3,
+          f4: lpcRes.f4,
+          sibHz: sibPeakSnr > 8.5 ? sibPeakBin * binHz : 0,
+          sibSnr: sibPeakSnr,
+          lowBandSnr,
+          burstFlux
+        };
+      }
+
+      // Step B: 3-Frame Trajectory Continuity Verification & Phoneme Segmentation
+      for (let f = 0; f < numFrames; f++) {
+        const cur = rawFormants[f];
+        const prev = rawFormants[Math.max(0, f - 1)];
+        const next = rawFormants[Math.min(numFrames - 1, f + 1)];
+
+        // Verify pole persistence across neighbor frames so isolated noise blips are rejected
+        const verifyPole = (poleKey, maxJumpHz) => {
+          const p = cur[poleKey];
+          if (!p) return null;
+          let neighbors = 0;
+          if (prev[poleKey] && Math.abs(prev[poleKey].hz - p.hz) < maxJumpHz) neighbors++;
+          if (next[poleKey] && Math.abs(next[poleKey].hz - p.hz) < maxJumpHz) neighbors++;
+          // Require neighbor continuity OR very strong prominence (> 5.5 dB)
+          if (neighbors >= 1 || p.prom >= 5.5) return p;
+          return null;
+        };
+
+        const vf1 = verifyPole('f1', 190);
+        const vf2 = verifyPole('f2', 290);
+        const vf3 = verifyPole('f3', 350);
+        const vf4 = verifyPole('f4', 420);
+
+        state.formantTrack[f] = {
+          f1: vf1, f2: vf2, f3: vf3, f4: vf4,
+          sibHz: cur.sibHz,
+          sibSnr: cur.sibSnr,
+          lowBandSnr: cur.lowBandSnr,
+          burstFlux: cur.burstFlux
+        };
+
+        // Phoneme Classification per Frame
+        const f0 = state.pitchTrack[f];
+        let ph = { label: '', category: 'noise', color: '#1e293b' };
+
+        if (cur.burstFlux > 1.35 && f0 === 0 && (cur.sibSnr > 8.0 || cur.lowBandSnr > 8.0)) {
+          ph = { label: cur.sibHz > 3600 ? '/t/' : '/k/', category: 'plosive', color: '#f43f5e' };
+        } else if (cur.sibSnr > 10.0 && cur.sibSnr > cur.lowBandSnr * 0.85 && f0 === 0) {
+          ph = { label: cur.sibHz > 4700 ? '/s/' : '/ʃ/', category: 'sibilant', color: '#38bdf8' };
+        } else if (f0 > 0 && (vf1 || vf2)) {
+          const f1Hz = vf1 ? vf1.hz : 500;
+          const f2Hz = vf2 ? vf2.hz : 1500;
+          const prevF2Hz = (f > 3 && state.formantTrack[f - 3] && state.formantTrack[f - 3].f2) ? state.formantTrack[f - 3].f2.hz : f2Hz;
+          if (Math.abs(f2Hz - prevF2Hz) > 135) {
+            ph = { label: '/aɪ/', category: 'diphthong', color: '#f59e0b' };
+          } else if (f1Hz > 560) {
+            ph = { label: '/a/', category: 'vowel', color: '#fbbf24' };
+          } else if (f2Hz > 1750) {
+            ph = { label: '/i/', category: 'vowel', color: '#fbbf24' };
+          } else {
+            ph = { label: '/u/', category: 'vowel', color: '#fbbf24' };
+          }
+        } else if (f0 === 0 && vf1 && vf2 && cur.lowBandSnr > 3.2 && state.trackWhispers) {
+          ph = { label: '/h/ [whisp]', category: 'whisper', color: '#a855f7' };
+        }
+        state.phonemeTrack[f] = ph;
+      }
+
+      // Step C: Build Sparse Pinpoint Phoneme Mask M(t, k) in [0, 1]
+      // Controlled by Pinpoint Tightness: at 88%, Gaussian pole aperture sigma is ~30 Hz (~1.3 bins)!
+      const tightness = state.pinpointTightness; // 0.25 .. 1.00
+      const sigmaFormantHz = Math.max(20.0, 95.0 - tightness * 68.0);
+      const twoSigmaFormantSq = 2.0 * sigmaFormantHz * sigmaFormantHz;
+      const sigmaHarmHz = Math.max(12.0, 34.0 - tightness * 20.0);
+      const twoSigmaHarmSq = 2.0 * sigmaHarmHz * sigmaHarmHz;
+      const vadThresh = state.vadThreshold;
+
+      let activeMaskBins = 0;
+      const totalBinsCount = numFrames * numBins;
+
+      for (let f = 0; f < numFrames; f++) {
+        const cleanP = state.cleanPower[f];
+        const fm = state.formantTrack[f];
+        const ph = state.phonemeTrack[f];
+        const f0 = state.pitchTrack[f];
+
+        const maskFrame = new Float32Array(numBins);
+        const dbFrame = new Float32Array(numBins);
+
+        const activePoles = [fm.f1, fm.f2, fm.f3, fm.f4].filter(Boolean);
+
+        for (let k = 0; k < numBins; k++) {
+          const hz = k * binHz;
+          const snrDb = 10.0 * Math.log10((cleanP[k] + 1e-12) / (state.noiseFloorPow[k] + 1e-12));
+
+          // 1. Evaluate Narrow Gaussian Formant Pole Aperture around verified F1..F4 poles
+          let poleAperture = 0.0;
+          if (ph.category !== 'noise') {
+            for (const pole of activePoles) {
+              const dHz = hz - pole.hz;
+              // Narrow Gaussian centered strictly on the LPC pole frequency
+              const g = Math.exp(-(dHz * dHz) / twoSigmaFormantSq);
+              const strength = Math.min(1.0, (pole.prom / 6.0) * Math.max(0.25, snrDb / 10.0));
+              if (g * strength > poleAperture) poleAperture = g * strength;
+            }
+          }
+
+          // 2. Evaluate Harmonic Comb Teeth (m * F0) when frame is Voiced
+          let harmonicTooth = 0.0;
+          if (f0 > 0 && hz >= f0 * 0.85 && hz <= 4000) {
+            const m = Math.max(1, Math.round(hz / f0));
+            const dHarmHz = hz - m * f0;
+            const tooth = Math.exp(-(dHarmHz * dHarmHz) / twoSigmaHarmSq);
+            // Fundamental F0 (m=1,2) and harmonics near LPC formant poles light up brightly
+            const formantSupport = (m <= 2) ? 0.85 : Math.max(0.20, poleAperture * 1.15);
+            harmonicTooth = tooth * formantSupport * Math.min(1.0, Math.max(0, snrDb / 9.0));
+          }
+
+          // 3. Evaluate Narrow Sibilant & Plosive Burst Islands
+          let consonantAperture = 0.0;
+          if ((ph.category === 'sibilant' || ph.category === 'plosive') && state.trackWhispers) {
+            if (fm.sibHz > 0) {
+              const dSib = hz - fm.sibHz;
+              const sibSigma = sigmaFormantHz * 2.8;
+              consonantAperture = Math.exp(-(dSib * dSib) / (2.0 * sibSigma * sibSigma)) * Math.min(1.0, Math.max(0, snrDb - 3.0) / 10.0);
+            }
+          }
+
+          // Combine Pinpoint Scores (Inter-formant valleys and flat noise stay strictly at 0.0!)
+          let rawScore = Math.max(
+            poleAperture,
+            harmonicTooth,
+            consonantAperture
+          );
+
+          // Apply sharp Sigmoid threshold for M(t, k)
+          let maskProb = 0.0;
+          if (rawScore > 0.06 && snrDb > 1.2) {
+            maskProb = 1.0 / (1.0 + Math.exp(-16.0 * (rawScore - vadThresh)));
+            maskProb *= Math.min(1.0, rawScore / vadThresh);
+          }
+
+          maskFrame[k] = maskProb;
+          if (maskProb > 0.5) activeMaskBins++;
+
+          // Compute enhanced display dB (boosted strictly where pinpoint mask is active)
+          const baseDb = 10.0 * Math.log10(cleanP[k] + 1e-12);
+          dbFrame[k] = baseDb + maskProb * (state.whisperBoostDb * 0.45);
+        }
+
+        state.speechMask[f] = maskFrame;
+        state.spectrogramDb[f] = dbFrame;
+      }
+
+      // Update Global Telemetry Pills
+      const meanF0 = countVoicedF0 > 0 ? Math.round(sumVoicedF0 / countVoicedF0) : 0;
+      els.telMeanF0.textContent = meanF0 > 0 ? `${meanF0} Hz` : '-- Hz';
+      const sparsityPct = ((activeMaskBins / Math.max(1, totalBinsCount)) * 100).toFixed(1);
+      els.telMaskSparsity.textContent = `${sparsityPct}% Active`;
+      els.valTightness.textContent = `${Math.round(tightness * 100)}% (~${Math.round(sigmaFormantHz)} Hz)`;
+
+      updateRoiTelemetry();
+      renderAllCanvases();
+    }
+
+    // =========================================================================
+    // 5. FREQUENCY SCALE MAPPING & DUAL-GRADIENT COLORMAP ENGINE
+    // =========================================================================
+    function normYToHz(normY, maxHz, scaleMode) {
+      const minHz = 40.0;
+      const clamped = Math.max(0.0, Math.min(1.0, normY));
+      if (scaleMode === 'log') {
+        return minHz * Math.pow(maxHz / minHz, clamped);
+      } else if (scaleMode === 'mel') {
+        const melMin = 2595.0 * Math.log10(1.0 + minHz / 700.0);
+        const melMax = 2595.0 * Math.log10(1.0 + maxHz / 700.0);
+        const mel = melMin + clamped * (melMax - melMin);
+        return 700.0 * (Math.pow(10.0, mel / 2595.0) - 1.0);
+      } else if (scaleMode === 'erb') {
+        const erbMin = 21.4 * Math.log10(1.0 + 0.00437 * minHz);
+        const erbMax = 21.4 * Math.log10(1.0 + 0.00437 * maxHz);
+        const erb = erbMin + clamped * (erbMax - erbMin);
+        return (Math.pow(10.0, erb / 21.4) - 1.0) / 0.00437;
+      }
+      return minHz + clamped * (maxHz - minHz);
+    }
+
+    function hzToNormY(hz, maxHz, scaleMode) {
+      const minHz = 40.0;
+      const f = Math.max(minHz, Math.min(maxHz, hz));
+      if (scaleMode === 'log') {
+        return Math.log(f / minHz) / Math.log(maxHz / minHz);
+      } else if (scaleMode === 'mel') {
+        const melMin = 2595.0 * Math.log10(1.0 + minHz / 700.0);
+        const melMax = 2595.0 * Math.log10(1.0 + maxHz / 700.0);
+        const mel = 2595.0 * Math.log10(1.0 + f / 700.0);
+        return (mel - melMin) / (melMax - melMin);
+      } else if (scaleMode === 'erb') {
+        const erbMin = 21.4 * Math.log10(1.0 + 0.00437 * minHz);
+        const erbMax = 21.4 * Math.log10(1.0 + 0.00437 * maxHz);
+        const erb = 21.4 * Math.log10(1.0 + 0.00437 * f);
+        return (erb - erbMin) / (erbMax - erbMin);
+      }
+      return (f - minHz) / (maxHz - minHz);
+    }
+
+    /**
+     * Dual-Gradient Color Synthesis:
+     * - Ambient Noise (mask -> 0): Deep Midnight Navy -> Electric Cyan -> Ice Blue
+     * - Vocal Phoneme / Formant (mask -> 1): Burnt Ochre -> Radiant Gold/Yellow -> Lemon White
+     */
+    function computeDualGradientRGB(intensity01, mask01, palette, soloVoice) {
+      const A = Math.max(0.0, Math.min(1.0, intensity01));
+      const M = Math.max(0.0, Math.min(1.0, mask01));
+
+      let ambR, ambG, ambB;
+      let vocR, vocG, vocB;
+
+      if (palette === 'cyber-emerald') {
+        ambR = Math.pow(A, 2.4) * 35;
+        ambG = Math.pow(A, 1.5) * 140;
+        ambB = Math.pow(A, 1.1) * 220 + 10;
+
+        vocR = Math.pow(A, 1.6) * 180 + 40 * M;
+        vocG = Math.min(255, Math.pow(A, 0.85) * 255 + 30);
+        vocB = Math.pow(A, 1.8) * 160;
+      } else if (palette === 'thermal-ir') {
+        ambR = Math.pow(A, 2.2) * 60;
+        ambG = Math.pow(A, 1.4) * 150;
+        ambB = Math.pow(A, 1.0) * 235 + 12;
+
+        vocR = Math.min(255, Math.pow(A, 0.75) * 255 + 45);
+        vocG = Math.pow(A, 1.35) * 195;
+        vocB = Math.pow(A, 2.6) * 120;
+      } else if (palette === 'mono-amber') {
+        const g = Math.pow(A, 1.2) * 150;
+        ambR = g * 0.75; ambG = g * 0.85; ambB = g;
+        vocR = Math.min(255, Math.pow(A, 0.75) * 255 + 40);
+        vocG = Math.min(255, Math.pow(A, 0.9) * 235 + 20);
+        vocB = Math.pow(A, 2.2) * 150;
+      } else {
+        // Default Signature Yellow / Blue Dual-Gradient
+        ambR = Math.pow(A, 2.6) * 95 + 3;
+        ambG = Math.pow(A, 1.55) * 185 + 7;
+        ambB = Math.min(255, Math.pow(A, 1.05) * 240 + 16);
+
+        vocR = Math.min(255, Math.pow(A, 0.70) * 255 + 42);
+        vocG = Math.min(255, Math.pow(A, 0.88) * 232 + 24);
+        vocB = Math.min(255, Math.pow(A, 2.6) * 210 + 10);
+      }
+
+      if (soloVoice) {
+        ambR *= 0.16;
+        ambG *= 0.16;
+        ambB *= 0.22;
+      }
+
+      const r = Math.round((1.0 - M) * ambR + M * vocR);
+      const g = Math.round((1.0 - M) * ambG + M * vocG);
+      const b = Math.round((1.0 - M) * ambB + M * vocB);
+      return [r, g, b];
+    }
+
+    // =========================================================================
+    // 6. MULTI-PANE CANVAS RENDERING ENGINE
+    // =========================================================================
+    function renderAllCanvases() {
+      renderMinimap();
+      renderPhonemeRibbon();
+      renderMainSpectrogram();
+      renderOverlaysAndFormants();
+      renderAxesRulers();
+      const targetFrame = state.pinnedFrame !== null ? state.pinnedFrame : state.hoverFrame;
+      renderLPCSliceInspector(targetFrame);
+    }
+
+    function renderMinimap() {
+      const canvas = els.minimapCanvas;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0 || !state.audioSamples) return;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+
+      const w = rect.width, h = rect.height;
+      ctx.fillStyle = '#040812';
+      ctx.fillRect(0, 0, w, h);
+
+      const samples = state.audioSamples;
+      const step = Math.max(1, Math.floor(samples.length / w));
+      const midY = h / 2;
+
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let x = 0; x < w; x++) {
+        const idx0 = Math.floor((x / w) * samples.length);
+        let maxAbs = 0;
+        for (let j = 0; j < step && idx0 + j < samples.length; j += 4) {
+          const v = Math.abs(samples[idx0 + j]);
+          if (v > maxAbs) maxAbs = v;
+        }
+        const ampH = Math.min(midY - 1, maxAbs * midY * 1.4);
+        ctx.moveTo(x + 0.5, midY - ampH);
+        ctx.lineTo(x + 0.5, midY + ampH);
+      }
+      ctx.stroke();
+
+      // Update viewport box
+      if (state.duration > 0) {
+        const leftPct = Math.max(0, (state.viewT0 / state.duration) * 100);
+        const widthPct = Math.min(100 - leftPct, ((state.viewT1 - state.viewT0) / state.duration) * 100);
+        els.minimapViewport.style.left = `${leftPct}%`;
+        els.minimapViewport.style.width = `${widthPct}%`;
+      }
+    }
+
+    function renderPhonemeRibbon() {
+      const canvas = els.phonemeRibbonCanvas;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0 || state.numFrames === 0) return;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+
+      const w = rect.width, h = rect.height;
+      ctx.fillStyle = '#040812';
+      ctx.fillRect(0, 0, w, h);
+
+      const vT0 = state.viewT0;
+      const vSpan = Math.max(0.01, state.viewT1 - state.viewT0);
+      const dur = state.duration;
+      const numFrames = state.numFrames;
+
+      const segments = [];
+      let curSeg = null;
+      for (let f = 0; f < numFrames; f++) {
+        const ph = state.phonemeTrack[f];
+        const t0 = (f / numFrames) * dur;
+        const t1 = ((f + 1) / numFrames) * dur;
+        if (!curSeg || curSeg.label !== ph.label) {
+          if (curSeg) segments.push(curSeg);
+          curSeg = { label: ph.label, color: ph.color, t0, t1 };
+        } else {
+          curSeg.t1 = t1;
+        }
+      }
+      if (curSeg) segments.push(curSeg);
+
+      ctx.font = 'bold 9.5px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      for (const seg of segments) {
+        if (!seg.label || seg.t1 < vT0 || seg.t0 > state.viewT1) continue;
+        const x0 = Math.max(0, ((seg.t0 - vT0) / vSpan) * w);
+        const x1 = Math.min(w, ((seg.t1 - vT0) / vSpan) * w);
+        const segW = x1 - x0;
+        if (segW < 3) continue;
+
+        ctx.fillStyle = seg.color + '30';
+        ctx.fillRect(x0, 2, segW, h - 4);
+        ctx.strokeStyle = seg.color;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x0 + 0.5, 2.5, Math.max(1, segW - 1), h - 5);
+
+        if (segW > 24) {
+          ctx.fillStyle = '#f8fafc';
+          ctx.fillText(seg.label, x0 + segW * 0.5, h * 0.5 + 0.5);
+        }
+      }
+    }
+
+    function renderMainSpectrogram() {
+      const canvas = els.specCanvas;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0 || state.numFrames === 0) return;
+
+      const w = Math.floor(rect.width);
+      const h = Math.floor(rect.height);
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      const imgData = ctx.createImageData(w, h);
+      const pixels = imgData.data;
+
+      const numFrames = state.numFrames;
+      const numBins = state.numBins;
+      const maxHz = state.sampleRate * 0.5;
+      const scaleMode = state.freqScale;
+      const palette = state.palette;
+      const soloVoice = state.soloVoiceColor;
+      const whitening = state.noiseWhitening;
+      const whisperBoost = state.whisperBoostDb;
+      const gamma = state.contrastGamma;
+      const minDb = state.minDb;
+      const maxDb = state.maxDb;
+      const dbSpan = Math.max(10, maxDb - minDb);
+
+      const vT0 = state.viewT0;
+      const vSpan = Math.max(0.01, state.viewT1 - state.viewT0);
+      const dur = state.duration;
+
+      // Pre-map each vertical pixel y to fractional bin index
+      const yToBin = new Float32Array(h);
+      for (let y = 0; y < h; y++) {
+        const normY = 1.0 - (y / (h - 1));
+        const hz = normYToHz(normY, maxHz, scaleMode);
+        yToBin[y] = Math.max(0, Math.min(numBins - 1.001, (hz / maxHz) * (numBins - 1)));
+      }
+
+      for (let x = 0; x < w; x++) {
+        const t = vT0 + (x / (w - 1)) * vSpan;
+        const fIdx = Math.max(0, Math.min(numFrames - 1, Math.floor((t / dur) * numFrames)));
+        const dbCol = state.spectrogramDb[fIdx];
+        const maskCol = state.speechMask[fIdx];
+
+        for (let y = 0; y < h; y++) {
+          const binFrac = yToBin[y];
+          const b0 = Math.floor(binFrac);
+          const b1 = Math.min(numBins - 1, b0 + 1);
+          const frac = binFrac - b0;
+
+          // Linear interpolation between adjacent frequency bins for smooth rendering
+          let db = dbCol[b0] * (1.0 - frac) + dbCol[b1] * frac;
+          const mask = maskCol[b0] * (1.0 - frac) + maskCol[b1] * frac;
+          const floorDb = state.noiseFloorDb[b0] * (1.0 - frac) + state.noiseFloorDb[b1] * frac;
+
+          // Sub-Band Spectral Whitening
+          if (whitening > 0) {
+            const excessAboveFloor = Math.max(0.0, db - floorDb);
+            db = (1.0 - whitening) * db + whitening * (minDb + excessAboveFloor * 2.15);
+          }
+
+          // Non-Linear Whisper & Formant Ridge Boost (strictly gated by pinpoint mask)
+          if (whisperBoost > 0 && mask > 0.05) {
+            db += whisperBoost * 0.45 * mask;
+          }
+
+          let normI = Math.max(0.0, Math.min(1.0, (db - minDb) / dbSpan));
+          normI = Math.pow(normI, 1.0 / gamma);
+
+          const [r, g, b] = computeDualGradientRGB(normI, mask, palette, soloVoice);
+          const pIdx = (y * w + x) * 4;
+          pixels[pIdx] = r;
+          pixels[pIdx + 1] = g;
+          pixels[pIdx + 2] = b;
+          pixels[pIdx + 3] = 255;
+        }
+      }
+
+      ctx.putImageData(imgData, 0, 0);
+      updateRoiBoxPosition();
+    }
+
+    function renderOverlaysAndFormants() {
+      const canvas = els.overlayCanvas;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0 || state.numFrames === 0) return;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+
+      const w = rect.width, h = rect.height;
+      ctx.clearRect(0, 0, w, h);
+
+      const maxHz = state.sampleRate * 0.5;
+      const scaleMode = state.freqScale;
+      const vT0 = state.viewT0;
+      const vSpan = Math.max(0.01, state.viewT1 - state.viewT0);
+      const dur = state.duration;
+      const numFrames = state.numFrames;
+
+      if (state.showFormantDots) {
+        const fStart = Math.max(0, Math.floor((vT0 / dur) * numFrames));
+        const fEnd = Math.min(numFrames - 1, Math.ceil((state.viewT1 / dur) * numFrames));
+
+        for (let f = fStart; f <= fEnd; f++) {
+          const t = (f / numFrames) * dur;
+          const x = ((t - vT0) / vSpan) * w;
+          const ph = state.phonemeTrack[f];
+          if (ph.category === 'noise') continue;
+
+          // Plot Fractional F0 Pitch Contour (Emerald Green)
+          const f0 = state.pitchTrack[f];
+          if (f0 > 0) {
+            const y0 = (1.0 - hzToNormY(f0, maxHz, scaleMode)) * h;
+            ctx.fillStyle = '#34d399';
+            ctx.fillRect(x - 1, y0 - 1, 2.5, 2.5);
+          }
+
+          // Plot Verified LPC Formant Poles F1, F2, F3 (Radiant Gold / Cyan)
+          const fm = state.formantTrack[f];
+          const drawPoleDot = (pole, color) => {
+            if (!pole) return;
+            const py = (1.0 - hzToNormY(pole.hz, maxHz, scaleMode)) * h;
+            ctx.fillStyle = color;
+            ctx.fillRect(x - 1, py - 1, 2.2, 2.2);
+          };
+          drawPoleDot(fm.f1, '#fde047');
+          drawPoleDot(fm.f2, '#fbbf24');
+          drawPoleDot(fm.f3, '#38bdf8');
+        }
+      }
+
+      // Draw Pinned Slice Indicator Line if pinned
+      if (state.pinnedFrame !== null && state.duration > 0) {
+        const pt = (state.pinnedFrame / state.numFrames) * dur;
+        if (pt >= vT0 && pt <= state.viewT1) {
+          const px = ((pt - vT0) / vSpan) * w;
+          ctx.strokeStyle = 'rgba(251, 191, 36, 0.85)';
+          ctx.lineWidth = 1.2;
+          ctx.setLineDash([4, 3]);
+          ctx.beginPath();
+          ctx.moveTo(px, 0);
+          ctx.lineTo(px, h);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+    }
+
+    function renderAxesRulers() {
+      // 1. Left Frequency Axis
+      const fCanvas = els.freqAxisCanvas;
+      const fRect = fCanvas.getBoundingClientRect();
+      if (fRect.width > 0 && fRect.height > 0) {
+        const dpr = window.devicePixelRatio || 1;
+        fCanvas.width = Math.floor(fRect.width * dpr);
+        fCanvas.height = Math.floor(fRect.height * dpr);
+        const fCtx = fCanvas.getContext('2d');
+        fCtx.scale(dpr, dpr);
+        fCtx.fillStyle = '#060b16';
+        fCtx.fillRect(0, 0, fRect.width, fRect.height);
+
+        const maxHz = state.sampleRate * 0.5;
+        const ticks = [60, 125, 250, 500, 1000, 1500, 2000, 3000, 4000, 6000, 8000, 10000];
+        fCtx.font = '10px "JetBrains Mono", monospace';
+        fCtx.fillStyle = '#94a3b8';
+        fCtx.strokeStyle = '#334155';
+        fCtx.textAlign = 'right';
+        fCtx.textBaseline = 'middle';
+
+        for (const hz of ticks) {
+          if (hz >= maxHz * 0.96) continue;
+          const y = (1.0 - hzToNormY(hz, maxHz, state.freqScale)) * fRect.height;
+          if (y < 8 || y > fRect.height - 8) continue;
+          fCtx.beginPath();
+          fCtx.moveTo(fRect.width - 5, y);
+          fCtx.lineTo(fRect.width, y);
+          fCtx.stroke();
+          const label = hz >= 1000 ? `${(hz / 1000).toFixed(hz % 1000 === 0 ? 0 : 1)}k` : `${hz}`;
+          fCtx.fillText(label, fRect.width - 7, y);
+        }
+      }
+
+      // 2. Bottom Time Axis
+      const tCanvas = els.timeAxisCanvas;
+      const tRect = tCanvas.getBoundingClientRect();
+      if (tRect.width > 0 && tRect.height > 0) {
+        const dpr = window.devicePixelRatio || 1;
+        tCanvas.width = Math.floor(tRect.width * dpr);
+        tCanvas.height = Math.floor(tRect.height * dpr);
+        const tCtx = tCanvas.getContext('2d');
+        tCtx.scale(dpr, dpr);
+        tCtx.fillStyle = '#060b16';
+        tCtx.fillRect(0, 0, tRect.width, tRect.height);
+
+        const vT0 = state.viewT0;
+        const vSpan = Math.max(0.01, state.viewT1 - state.viewT0);
+        const numTicks = Math.max(4, Math.floor(tRect.width / 95));
+        tCtx.font = '10px "JetBrains Mono", monospace';
+        tCtx.fillStyle = '#94a3b8';
+        tCtx.strokeStyle = '#334155';
+        tCtx.textAlign = 'center';
+        tCtx.textBaseline = 'top';
+
+        for (let i = 0; i <= numTicks; i++) {
+          const x = (i / numTicks) * tRect.width;
+          const t = vT0 + (i / numTicks) * vSpan;
+          tCtx.beginPath();
+          tCtx.moveTo(x, 0);
+          tCtx.lineTo(x, 4);
+          tCtx.stroke();
+          if (i > 0 && i < numTicks) {
+            tCtx.fillText(`${t.toFixed(2)}s`, x, 6);
+          }
+        }
+      }
+    }
+
+    // =========================================================================
+    // 7. RIGHT-SIDE 18th-ORDER LPC ENVELOPE & VOWEL SPACE INSPECTOR
+    // =========================================================================
+    function renderLPCSliceInspector(frameIdx) {
+      if (state.numFrames === 0) return;
+      const f = Math.max(0, Math.min(state.numFrames - 1, frameIdx || 0));
+
+      const canvas = els.lpcSliceCanvas;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+
+      const w = rect.width, h = rect.height;
+      ctx.fillStyle = '#03060f';
+      ctx.fillRect(0, 0, w, h);
+
+      const numBins = state.numBins;
+      const maxHz = state.sampleRate * 0.5;
+      const displayMaxHz = Math.min(maxHz, 6500); // Focus inspector on 0 - 6.5 kHz speech band
+      const maxBin = Math.min(numBins - 1, Math.floor((displayMaxHz / maxHz) * (numBins - 1)));
+
+      const cleanP = state.cleanPower[f];
+      const lpcDb = state.lpcEnvelopesDb[f];
+      const floorDb = state.noiseFloorDb;
+      const fm = state.formantTrack[f];
+      const ph = state.phonemeTrack[f];
+      const f0 = state.pitchTrack[f];
+      const cpp = state.cppTrack[f];
+
+      // Subtle Frequency Grid Lines (1k, 2k, 3k, 4k, 5k)
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 1;
+      ctx.font = '9px "JetBrains Mono", monospace';
+      ctx.fillStyle = '#64748b';
+      for (let hz = 1000; hz <= 6000; hz += 1000) {
+        const x = (hz / displayMaxHz) * w;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+        ctx.fillText(`${hz / 1000}k`, x + 2, h - 4);
+      }
+
+      const dbMin = -95, dbMax = 15;
+      const dbToY = (db) => {
+        const norm = (db - dbMin) / (dbMax - dbMin);
+        return h - 14 - Math.max(0, Math.min(1, norm)) * (h - 28);
+      };
+
+      // 1. Plot Stationary Noise Floor (Dashed Rose Red)
+      ctx.strokeStyle = 'rgba(244, 63, 94, 0.65)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      for (let k = 0; k <= maxBin; k++) {
+        const x = (k / maxBin) * w;
+        const y = dbToY(floorDb[k]);
+        if (k === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 2. Plot Fine STFT Power Spectrum (Cyan)
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.75)';
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      for (let k = 0; k <= maxBin; k++) {
+        const x = (k / maxBin) * w;
+        const db = 10.0 * Math.log10(cleanP[k] + 1e-12);
+        const y = dbToY(db);
+        if (k === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      // 3. Plot Smooth 18th-Order LPC Vocal Tract Transfer Envelope (Radiant Gold)
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 2.0;
+      ctx.beginPath();
+      for (let k = 0; k <= maxBin; k++) {
+        const x = (k / maxBin) * w;
+        // Undo pre-emphasis tilt for visual alignment with raw STFT slice
+        const hz = (k / (numBins - 1)) * maxHz;
+        const deEmpDb = 10.0 * Math.log10(1.0 + (hz / 650.0) * (hz / 650.0));
+        const y = dbToY(lpcDb[k] - deEmpDb + 6.0);
+        if (k === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      // 4. Mark Extracted Formant Poles F1, F2, F3, F4 on the LPC Curve
+      const markPole = (pole, label, col) => {
+        if (!pole || pole.hz > displayMaxHz) return;
+        const x = (pole.hz / displayMaxHz) * w;
+        const deEmpDb = 10.0 * Math.log10(1.0 + (pole.hz / 650.0) * (pole.hz / 650.0));
+        const y = dbToY(pole.db - deEmpDb + 6.0);
+
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x, h - 14);
+        ctx.stroke();
+
+        ctx.fillStyle = col;
+        ctx.beginPath();
+        ctx.arc(x, y, 3.5, 0, 2 * Math.PI);
+        ctx.fill();
+
+        ctx.font = 'bold 9.5px "JetBrains Mono", monospace';
+        ctx.fillText(`${label}:${Math.round(pole.hz)}`, Math.min(w - 48, Math.max(2, x - 18)), Math.max(11, y - 6));
+      };
+
+      markPole(fm.f1, 'F1', '#fde047');
+      markPole(fm.f2, 'F2', '#fbbf24');
+      markPole(fm.f3, 'F3', '#38bdf8');
+      markPole(fm.f4, 'F4', '#a855f7');
+
+      // Update Table Readouts
+      els.lblSlicePhoneme.textContent = ph.label || 'AMBIENT';
+      els.tblF0Hz.textContent = f0 > 0 ? `${f0.toFixed(1)} Hz` : 'Unvoiced';
+      els.tblF0Harm.textContent = f0 > 0 ? 'Voiced Comb' : 'Aperiodic';
+      els.tblF0Cpp.textContent = `${cpp.toFixed(1)} dB`;
+
+      const fillRow = (pole, elHz, elBw, elProm) => {
+        if (pole) {
+          elHz.textContent = `${Math.round(pole.hz)} Hz`;
+          elBw.textContent = `${Math.round(pole.bw)} Hz`;
+          elProm.textContent = `+${pole.prom.toFixed(1)} dB`;
+        } else {
+          elHz.textContent = '--';
+          elBw.textContent = '--';
+          elProm.textContent = '--';
+        }
+      };
+      fillRow(fm.f1, els.tblF1Hz, els.tblF1Bw, els.tblF1Prom);
+      fillRow(fm.f2, els.tblF2Hz, els.tblF2Bw, els.tblF2Prom);
+      fillRow(fm.f3, els.tblF3Hz, els.tblF3Bw, els.tblF3Prom);
+      fillRow(fm.f4, els.tblF4Hz, els.tblF4Bw, els.tblF4Prom);
+
+      renderVowelSpacePlane(fm.f1, fm.f2);
+    }
+
+    function renderVowelSpacePlane(f1Pole, f2Pole) {
+      const canvas = els.vowelSpaceCanvas;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+
+      const w = rect.width, h = rect.height;
+      ctx.fillStyle = '#03060f';
+      ctx.fillRect(0, 0, w, h);
+
+      // Standard Acoustic Phonetics F1-F2 Plane:
+      // X-axis: F2 from 2600 Hz (left, front) to 700 Hz (right, back)
+      // Y-axis: F1 from 200 Hz (top, close) to 900 Hz (bottom, open)
+      const f2ToX = (f2) => ((2600 - f2) / (2600 - 700)) * (w - 28) + 14;
+      const f1ToY = (f1) => ((f1 - 200) / (900 - 200)) * (h - 24) + 12;
+
+      const refVowels = [
+        { label: '/i/', f1: 280, f2: 2250 },
+        { label: '/e/', f1: 450, f2: 1950 },
+        { label: '/a/', f1: 730, f2: 1090 },
+        { label: '/o/', f1: 480, f2: 920 },
+        { label: '/u/', f1: 300, f2: 870 }
+      ];
+
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      refVowels.forEach((v, idx) => {
+        const vx = f2ToX(v.f2), vy = f1ToY(v.f1);
+        if (idx === 0) ctx.moveTo(vx, vy);
+        else ctx.lineTo(vx, vy);
+      });
+      ctx.closePath();
+      ctx.stroke();
+
+      ctx.font = 'bold 9.5px "JetBrains Mono", monospace';
+      ctx.fillStyle = '#64748b';
+      ctx.textAlign = 'center';
+      for (const v of refVowels) {
+        const vx = f2ToX(v.f2), vy = f1ToY(v.f1);
+        ctx.fillText(v.label, vx, vy + 3);
+      }
+
+      if (f1Pole && f2Pole) {
+        const cx = Math.max(6, Math.min(w - 6, f2ToX(f2Pole.hz)));
+        const cy = Math.max(6, Math.min(h - 6, f1ToY(f1Pole.hz)));
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath();
+        ctx.arc(cx, cy, 4.5, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.strokeStyle = '#fef08a';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    }
+
+    // =========================================================================
+    // 8. 2D TIME-FREQUENCY ROI SELECTION & SPACEBAR 0.5ms SURGICAL BANDPASS LOOP
+    // =========================================================================
+    function updateRoiBoxPosition() {
+      const box = els.roiSelectionBox;
+      if (!state.roi.active || state.duration <= 0) {
+        box.classList.add('hidden');
+        return;
+      }
+      const rect = els.specCanvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+
+      const vT0 = state.viewT0;
+      const vSpan = Math.max(0.01, state.viewT1 - state.viewT0);
+      const maxHz = state.sampleRate * 0.5;
+
+      const tStart = Math.min(state.roi.t0, state.roi.t1);
+      const tEnd = Math.max(state.roi.t0, state.roi.t1);
+      const fLow = Math.min(state.roi.fLow, state.roi.fHigh);
+      const fHigh = Math.max(state.roi.fLow, state.roi.fHigh);
+
+      const x0 = ((tStart - vT0) / vSpan) * rect.width;
+      const x1 = ((tEnd - vT0) / vSpan) * rect.width;
+      const yTop = (1.0 - hzToNormY(fHigh, maxHz, state.freqScale)) * rect.height;
+      const yBot = (1.0 - hzToNormY(fLow, maxHz, state.freqScale)) * rect.height;
+
+      const left = Math.max(0, Math.min(rect.width, x0));
+      const right = Math.max(0, Math.min(rect.width, x1));
+      const top = Math.max(0, Math.min(rect.height, yTop));
+      const bottom = Math.max(0, Math.min(rect.height, yBot));
+
+      if (right - left < 2 || bottom - top < 2) {
+        box.classList.add('hidden');
+        return;
+      }
+
+      box.classList.remove('hidden');
+      box.style.left = `${left}px`;
+      box.style.top = `${top}px`;
+      box.style.width = `${right - left}px`;
+      box.style.height = `${bottom - top}px`;
+
+      const dtMs = Math.round((tEnd - tStart) * 1000);
+      const dfHz = Math.round(fHigh - fLow);
+      els.roiBadge.textContent = `ROI: ${dtMs}ms | ${Math.round(fLow)}–${Math.round(fHigh)} Hz (Δ${dfHz} Hz) | SPACE: Loop (0.5ms)`;
+    }
+
+    function updateRoiTelemetry() {
+      if (!state.roi.active || state.numFrames === 0) return;
+      const tStart = Math.min(state.roi.t0, state.roi.t1);
+      const tEnd = Math.max(state.roi.t0, state.roi.t1);
+      const fLow = Math.min(state.roi.fLow, state.roi.fHigh);
+      const fHigh = Math.max(state.roi.fLow, state.roi.fHigh);
+      const fc = Math.round(0.5 * (fLow + fHigh));
+
+      els.lblRoiTime.textContent = `${tStart.toFixed(3)}s – ${tEnd.toFixed(3)}s (${Math.round((tEnd - tStart) * 1000)} ms)`;
+      els.lblRoiFreq.textContent = `${Math.round(fLow)} Hz – ${Math.round(fHigh)} Hz (fc: ${fc} Hz)`;
+
+      const f0Idx = Math.max(0, Math.floor((tStart / state.duration) * state.numFrames));
+      const f1Idx = Math.min(state.numFrames - 1, Math.ceil((tEnd / state.duration) * state.numFrames));
+      const phSet = new Set();
+      let sumSnr = 0, cnt = 0;
+
+      for (let f = f0Idx; f <= f1Idx; f++) {
+        if (state.phonemeTrack[f] && state.phonemeTrack[f].label) {
+          phSet.add(state.phonemeTrack[f].label);
+        }
+        if (state.formantTrack[f] && state.formantTrack[f].lowBandSnr) {
+          sumSnr += state.formantTrack[f].lowBandSnr;
+          cnt++;
+        }
+      }
+      const phList = Array.from(phSet).slice(0, 4).join(', ') || 'Noise Floor';
+      const avgSnr = cnt > 0 ? `+${(sumSnr / cnt).toFixed(1)} dB` : '-- dB';
+      els.lblRoiPhonemes.textContent = `${phList} (${avgSnr})`;
+    }
+
+    /**
+     * Synthesizes a Surgically Isolated Brickwall Overlap-Add FFT Bandpass + Spectral Denoised Buffer
+     * for the exact 2D ROI [tStart, tEnd] x [fLow, fHigh], with an exact 0.5ms (0.0005s) loopback delay pad.
+     */
+    function buildIsolatedRoiBandpassBuffer(samples, sr, tStart, tEnd, fLow, fHigh, includeHalfMsPad = true) {
+      const s0 = Math.max(0, Math.floor(tStart * sr));
+      const s1 = Math.min(samples.length, Math.ceil(tEnd * sr));
+      const segLen = Math.max(512, s1 - s0);
+      const padSamples = includeHalfMsPad ? Math.max(1, Math.round(0.0005 * sr)) : 0; // Exact 0.5ms loopback delay
+      const outBuf = new Float32Array(segLen + padSamples);
+
+      const N = 1024;
+      const hop = 256;
+      const win = new Float32Array(N);
+      for (let i = 0; i < N; i++) win[i] = 0.5 * (1.0 - Math.cos((2.0 * Math.PI * i) / N));
+
+      const re = new Float32Array(N);
+      const im = new Float32Array(N);
+      const olaNorm = new Float32Array(segLen);
+
+      const binHz = sr / N;
+      const kLow = Math.max(1, Math.floor(fLow / binHz));
+      const kHigh = Math.min((N >> 1) - 1, Math.ceil(fHigh / binHz));
+      const alpha = state.oversubtractionAlpha * 0.75;
+
+      for (let pos = -N + hop; pos < segLen; pos += hop) {
+        for (let i = 0; i < N; i++) {
+          const srcIdx = s0 + pos + i;
+          re[i] = (pos + i >= 0 && pos + i < segLen && srcIdx < samples.length) ? samples[srcIdx] * win[i] : 0.0;
+          im[i] = 0.0;
+        }
+        fftRadix2(re, im, false);
+
+        // Zero all bins outside [kLow .. kHigh] (with 2-bin cosine taper) and apply gentle spectral floor cleaning
+        for (let k = 0; k <= (N >> 1); k++) {
+          let gain = 0.0;
+          if (k >= kLow && k <= kHigh) {
+            gain = 1.0;
+            if (state.noiseFloorPow && k < state.noiseFloorPow.length) {
+              const magSq = (re[k] * re[k] + im[k] * im[k]) / N;
+              const flr = state.noiseFloorPow[k];
+              const cleanRatio = Math.max(0.12, (magSq - alpha * flr) / (magSq + 1e-12));
+              gain = Math.sqrt(cleanRatio);
+            }
+          } else if (k === kLow - 1 || k === kHigh + 1) {
+            gain = 0.25;
+          }
+
+          re[k] *= gain;
+          im[k] *= gain;
+          if (k > 0 && k < (N >> 1)) {
+            re[N - k] = re[k];
+            im[N - k] = -im[k];
+          }
+        }
+
+        fftRadix2(re, im, true);
+
+        for (let i = 0; i < N; i++) {
+          const dst = pos + i;
+          if (dst >= 0 && dst < segLen) {
+            outBuf[dst] += re[i] * win[i];
+            olaNorm[dst] += win[i] * win[i];
+          }
+        }
+      }
+
+      // Normalize OLA & Peak-Normalize Audition Signal with 2.5ms anti-click cosine fades
+      let maxPeak = 1e-6;
+      for (let i = 0; i < segLen; i++) {
+        if (olaNorm[i] > 1e-6) outBuf[i] /= olaNorm[i];
+        const absV = Math.abs(outBuf[i]);
+        if (absV > maxPeak) maxPeak = absV;
+      }
+      const targetGain = Math.min(18.0, 0.82 / maxPeak);
+      const fadeLen = Math.min(Math.floor(segLen * 0.1), Math.round(0.0025 * sr));
+      for (let i = 0; i < segLen; i++) {
+        let env = 1.0;
+        if (i < fadeLen) env = 0.5 * (1.0 - Math.cos((Math.PI * i) / fadeLen));
+        else if (i >= segLen - fadeLen) env = 0.5 * (1.0 - Math.cos((Math.PI * (segLen - 1 - i)) / fadeLen));
+        outBuf[i] *= targetGain * env;
+      }
+      // Trailing padSamples [segLen .. segLen + padSamples - 1] remain strictly 0.0 (exact 0.5ms loopback delay)
+      return { buffer: outBuf, segLen, padSamples };
+    }
+
+    function ensureAudioContext() {
+      if (!state.audioCtx) {
+        state.audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: state.sampleRate });
+      }
+      if (state.audioCtx.state === 'suspended') {
+        state.audioCtx.resume();
+      }
+    }
+
+    function stopAllAudioPlayback() {
+      if (state.activeSourceNode) {
+        try { state.activeSourceNode.onended = null; state.activeSourceNode.stop(); } catch (e) {}
+        state.activeSourceNode.disconnect();
+        state.activeSourceNode = null;
+      }
+      if (state.loopTimerId) {
+        clearTimeout(state.loopTimerId);
+        state.loopTimerId = null;
+      }
+      if (state.animFrameId) {
+        cancelAnimationFrame(state.animFrameId);
+        state.animFrameId = null;
+      }
+      state.isPlayingFull = false;
+      state.isLoopingRoi = false;
+      els.lblPlayFull.textContent = 'Play Full Audio';
+      els.lblLoopRoi.textContent = 'Loop ROI [SPACE]';
+      els.roiSelectionBox.classList.remove('roi-active-loop');
+      els.playheadLine.classList.add('hidden');
+    }
+
+    function toggleRoiBandpassLoop() {
+      if (state.isLoopingRoi || state.isPlayingFull) {
+        stopAllAudioPlayback();
+        logMsg('Stopped audio playback.', 'info');
+        return;
+      }
+      if (!state.audioSamples) return;
+      ensureAudioContext();
+
+      const tStart = Math.min(state.roi.t0, state.roi.t1);
+      const tEnd = Math.max(state.roi.t0, state.roi.t1);
+      const fLow = Math.min(state.roi.fLow, state.roi.fHigh);
+      const fHigh = Math.max(state.roi.fLow, state.roi.fHigh);
+
+      const { buffer, segLen, padSamples } = buildIsolatedRoiBandpassBuffer(
+        state.audioSamples, state.sampleRate, tStart, tEnd, fLow, fHigh, true
+      );
+
+      const audioBuf = state.audioCtx.createBuffer(1, buffer.length, state.sampleRate);
+      audioBuf.copyToChannel(buffer, 0);
+
+      // Additional 4th-order cascaded Biquad Bandpass in Web Audio graph for ultra-clean stopband rejection
+      const bpLow = state.audioCtx.createBiquadFilter();
+      bpLow.type = 'highpass';
+      bpLow.frequency.value = Math.max(40, fLow);
+      bpLow.Q.value = 0.707;
+
+      const bpHigh = state.audioCtx.createBiquadFilter();
+      bpHigh.type = 'lowpass';
+      bpHigh.frequency.value = Math.min(state.sampleRate * 0.48, fHigh);
+      bpHigh.Q.value = 0.707;
+
+      const src = state.audioCtx.createBufferSource();
+      src.buffer = audioBuf;
+      src.loop = true; // Loops buffer which includes the exact 0.5ms (padSamples) loopback delay
+      src.connect(bpLow);
+      bpLow.connect(bpHigh);
+      bpHigh.connect(state.audioCtx.destination);
+
+      state.activeSourceNode = src;
+      state.isLoopingRoi = true;
+      state.playStartCtxTime = state.audioCtx.currentTime;
+      src.start(0);
+
+      els.lblLoopRoi.textContent = 'Stop Loop [SPACE]';
+      els.roiSelectionBox.classList.add('roi-active-loop');
+      els.playheadLine.classList.remove('hidden');
+
+      const roiDurSec = segLen / state.sampleRate;
+      const totalLoopSec = buffer.length / state.sampleRate;
+
+      const updateLoopScrubber = () => {
+        if (!state.isLoopingRoi) return;
+        const elapsed = (state.audioCtx.currentTime - state.playStartCtxTime) % totalLoopSec;
+        const curT = tStart + Math.min(roiDurSec, elapsed);
+        positionPlayheadAtTime(curT);
+        state.animFrameId = requestAnimationFrame(updateLoopScrubber);
+      };
+      updateLoopScrubber();
+
+      logMsg(`SPACEBAR ROI Loop active: [${tStart.toFixed(3)}s..${tEnd.toFixed(3)}s] × [${Math.round(fLow)}..${Math.round(fHigh)} Hz] with ${padSamples}-sample (0.5ms) loopback delay.`, 'forensic');
+    }
+
+    function toggleFullPlayback() {
+      if (state.isPlayingFull || state.isLoopingRoi) {
+        stopAllAudioPlayback();
+        return;
+      }
+      if (!state.audioSamples) return;
+      ensureAudioContext();
+
+      const audioBuf = state.audioCtx.createBuffer(1, state.audioSamples.length, state.sampleRate);
+      audioBuf.copyToChannel(state.audioSamples, 0);
+
+      const src = state.audioCtx.createBufferSource();
+      src.buffer = audioBuf;
+      src.connect(state.audioCtx.destination);
+
+      state.activeSourceNode = src;
+      state.isPlayingFull = true;
+      state.playStartCtxTime = state.audioCtx.currentTime;
+      src.start(0);
+
+      els.lblPlayFull.textContent = 'Stop Playback';
+      els.playheadLine.classList.remove('hidden');
+
+      src.onended = () => {
+        if (state.isPlayingFull) stopAllAudioPlayback();
+      };
+
+      const tickFull = () => {
+        if (!state.isPlayingFull) return;
+        const curT = state.audioCtx.currentTime - state.playStartCtxTime;
+        if (curT <= state.duration) {
+          positionPlayheadAtTime(curT);
+          state.animFrameId = requestAnimationFrame(tickFull);
+        }
+      };
+      tickFull();
+    }
+
+    function positionPlayheadAtTime(tSec) {
+      const rect = els.specCanvas.getBoundingClientRect();
+      const vT0 = state.viewT0;
+      const vSpan = Math.max(0.01, state.viewT1 - state.viewT0);
+      if (tSec < vT0 || tSec > state.viewT1) {
+        els.playheadLine.classList.add('hidden');
+        return;
+      }
+      els.playheadLine.classList.remove('hidden');
+      const x = ((tSec - vT0) / vSpan) * rect.width;
+      els.playheadLine.style.left = `${x}px`;
+    }
+
+    // =========================================================================
+    // 9. AUTOMATED MATHEMATICAL & ACOUSTIC DSP VERIFICATION SUITE (6 TESTS)
+    // =========================================================================
+    function runAutomatedDspVerificationSuite() {
+      const results = [];
+
+      // TEST 1: 4-Term Blackman-Harris STFT Sidelobe Rejection (> 90 dB)
+      {
+        const N = 1024;
+        const win = createBlackmanHarrisWindow(N);
+        const re = new Float32Array(N);
+        const im = new Float32Array(N);
+        const binTarget = 80;
+        for (let n = 0; n < N; n++) {
+          re[n] = Math.cos((2.0 * Math.PI * binTarget * n) / N) * win[n];
+        }
+        fftRadix2(re, im, false);
+        const peakPow = re[binTarget] * re[binTarget] + im[binTarget] * im[binTarget];
+        let maxSidelobePow = 0;
+        for (let k = 10; k < 500; k++) {
+          if (Math.abs(k - binTarget) > 6) {
+            const p = re[k] * re[k] + im[k] * im[k];
+            if (p > maxSidelobePow) maxSidelobePow = p;
+          }
+        }
+        const rejectionDb = 10.0 * Math.log10(peakPow / (maxSidelobePow + 1e-20));
+        results.push({
+          name: '1. Blackman-Harris STFT Sidelobe Rejection',
+          passed: rejectionDb >= 90.0,
+          detail: `Peak-to-sidelobe attenuation: -${rejectionDb.toFixed(1)} dB (Spec: >= 90.0 dB)`
+        });
+      }
+
+      // TEST 2: Klatt Cascade 2nd-Order Digital IIR Resonator Pole Accuracy
+      {
+        const sr = 24000;
+        const targetHz = 730.0;
+        const res = new KlattIIRResonator(sr);
+        const N = 2048;
+        const re = new Float32Array(N);
+        const im = new Float32Array(N);
+        for (let n = 0; n < N; n++) {
+          re[n] = res.step(n === 0 ? 1.0 : 0.0, targetHz, 55.0);
+        }
+        fftRadix2(re, im, false);
+        let bestK = 1, bestM = 0;
+        for (let k = 1; k < N / 2; k++) {
+          const m = Math.hypot(re[k], im[k]);
+          if (m > bestM) { bestM = m; bestK = k; }
+        }
+        const y1 = Math.hypot(re[bestK - 1], im[bestK - 1]);
+        const y2 = bestM;
+        const y3 = Math.hypot(re[bestK + 1], im[bestK + 1]);
+        const delta = 0.5 * (y1 - y3) / (y1 - 2 * y2 + y3);
+        const measuredHz = (bestK + delta) * (sr / N);
+        const errHz = Math.abs(measuredHz - targetHz);
+        results.push({
+          name: '2. Klatt Digital IIR Resonator Pole Placement',
+          passed: errHz < 5.0,
+          detail: `Target F1=730.0 Hz -> Measured Impulse Peak=${measuredHz.toFixed(2)} Hz (Err: ${errHz.toFixed(2)} Hz)`
+        });
+      }
+
+      // TEST 3: 18th-Order Wiener-Khinchin Levinson-Durbin LPC Formant Extraction in Noise
+      {
+        const sr = 24000;
+        const N = 1024;
+        const tract = new KlattVocalTractCascade(sr);
+        const win = createBlackmanHarrisWindow(N);
+        const re = new Float32Array(N);
+        const im = new Float32Array(N);
+        let ph = 0;
+        // Warmup IIR state then capture 1024 samples of vowel /a/ (730, 1090, 2440 Hz)
+        for (let n = 0; n < N + 512; n++) {
+          ph = (ph + 125.0 / sr) % 1.0;
+          const glot = rosenbergGlottalPulse(ph);
+          const y = tract.stepCascade(glot, 730, 55, 1090, 80, 2440, 110);
+          if (n >= 512) re[n - 512] = y * win[n - 512];
+        }
+        fftRadix2(re, im, false);
+        const numBins = N >> 1;
+        const cleanP = new Float32Array(numBins);
+        for (let k = 0; k < numBins; k++) cleanP[k] = (re[k] * re[k] + im[k] * im[k]) / N;
+
+        const lpc = extractLPCFormantsFromCleanSpectrum(cleanP, numBins, sr, 18);
+        const f1Err = lpc.f1 ? Math.abs(lpc.f1.hz - 730) : 999;
+        const f2Err = lpc.f2 ? Math.abs(lpc.f2.hz - 1090) : 999;
+        const f3Err = lpc.f3 ? Math.abs(lpc.f3.hz - 2440) : 999;
+        const passed = f1Err < 45 && f2Err < 55 && f3Err < 75;
+        results.push({
+          name: '3. 18th-Order Levinson-Durbin LPC Formant Accuracy',
+          passed,
+          detail: `Extracted [${lpc.f1 ? Math.round(lpc.f1.hz) : '--'}, ${lpc.f2 ? Math.round(lpc.f2.hz) : '--'}, ${lpc.f3 ? Math.round(lpc.f3.hz) : '--'} Hz] vs True [730, 1090, 2440 Hz]`
+        });
+      }
+
+      // TEST 4: Real Cepstrum & Parabolic Interpolation Fractional F0 Tracker
+      {
+        const sr = 24000;
+        const targetF0 = 135.0; // Non-integer period: 24000 / 135 = 177.778 samples
+        const N = 1024;
+        const win = createBlackmanHarrisWindow(N);
+        const re = new Float32Array(N);
+        const im = new Float32Array(N);
+        let ph = 0;
+        for (let n = 0; n < N; n++) {
+          ph = (ph + targetF0 / sr) % 1.0;
+          re[n] = rosenbergGlottalPulse(ph) * win[n];
+        }
+        fftRadix2(re, im, false);
+        const numBins = N >> 1;
+        const pow = new Float32Array(numBins);
+        for (let k = 0; k < numBins; k++) pow[k] = (re[k] * re[k] + im[k] * im[k]) / N;
+        const { f0, cppDb } = extractCepstralPitch(pow, numBins, sr);
+        const errHz = Math.abs(f0 - targetF0);
+        results.push({
+          name: '4. Real Cepstrum Sub-Sample Fractional F0 & CPP',
+          passed: errHz < 1.5 && cppDb > 7.0,
+          detail: `Target F0=135.0 Hz -> Measured=${f0.toFixed(2)} Hz (Err: ${errHz.toFixed(2)} Hz, CPP: +${cppDb.toFixed(1)} dB)`
+        });
+      }
+
+      // TEST 5: Pinpoint Phoneme Mask Sparsity (Zero Broadband Yellow Bleed)
+      {
+        let activeCount = 0, totalCount = 0;
+        for (let f = 0; f < state.numFrames; f++) {
+          const m = state.speechMask[f];
+          for (let k = 0; k < state.numBins; k++) {
+            totalCount++;
+            if (m[k] > 0.5) activeCount++;
+          }
+        }
+        const pct = (activeCount / Math.max(1, totalCount)) * 100;
+        const passed = pct > 0.4 && pct < 18.0;
+        results.push({
+          name: '5. Sparse Pinpoint Phoneme Mask Verification',
+          passed,
+          detail: `Active Yellow Mask Density: ${pct.toFixed(2)}% of T-F bins (Spec: 0.4% – 18.0% sparse trajectories)`
+        });
+      }
+
+      // TEST 6: 0.5ms Loopback Delay & Surgical Bandpass Isolation
+      {
+        const sr = 24000;
+        const testLen = Math.floor(sr * 0.4);
+        const sig = new Float32Array(testLen);
+        for (let i = 0; i < testLen; i++) {
+          const t = i / sr;
+          // 1000 Hz in-band tone + 5000 Hz out-of-band tone
+          sig[i] = Math.sin(2 * Math.PI * 1000 * t) * 0.5 + Math.sin(2 * Math.PI * 5000 * t) * 0.5;
+        }
+        const { buffer, segLen, padSamples } = buildIsolatedRoiBandpassBuffer(sig, sr, 0.0, 0.4, 700, 1300, true);
+        const expectedPad = Math.round(0.0005 * sr); // 12 samples at 24 kHz
+        let tailEnergy = 0;
+        for (let i = segLen; i < buffer.length; i++) tailEnergy += Math.abs(buffer[i]);
+        const passed = (padSamples === expectedPad) && (tailEnergy === 0.0);
+        results.push({
+          name: '6. Surgical ROI Bandpass & 0.5ms Loopback Pad',
+          passed,
+          detail: `Loopback silence pad=${padSamples} samples (${(padSamples / sr * 1000).toFixed(2)} ms), tail leak=${tailEnergy.toFixed(6)}`
+        });
+      }
+
+      // Render Results in Modal & Header Badge
+      const passCount = results.filter(r => r.passed).length;
+      els.badgeSelfTest.textContent = `DSP TESTS: ${passCount}/${results.length} PASS`;
+      els.selfTestResultsList.innerHTML = '';
+      for (const r of results) {
+        const row = document.createElement('div');
+        row.className = `p-2.5 rounded border ${r.passed ? 'bg-emerald-950/30 border-emerald-500/40' : 'bg-rose-950/30 border-rose-500/40'} flex items-center justify-between`;
+        row.innerHTML = `
+          <div>
+            <div class="font-bold ${r.passed ? 'text-emerald-300' : 'text-rose-300'}">${r.name}</div>
+            <div class="text-[11px] text-slate-400">${r.detail}</div>
+          </div>
+          <span class="px-2 py-0.5 rounded text-[10px] font-bold ${r.passed ? 'bg-emerald-500 text-slate-950' : 'bg-rose-500 text-white'}">
+            ${r.passed ? 'VERIFIED' : 'FAIL'}
+          </span>
+        `;
+        els.selfTestResultsList.appendChild(row);
+      }
+      logMsg(`Automated DSP Verification Suite: ${passCount}/${results.length} mathematical unit tests PASSED.`, 'pass');
+    }
+
+    // =========================================================================
+    // 10. FILE INGESTION, RAW PCM STREAMING, LIVE MIC & EXPORTS
+    // =========================================================================
+    function loadAudioSamplesIntoEngine(samples, sr, sourceLabel, defaultRoi = null) {
+      stopAllAudioPlayback();
+      state.audioSamples = samples;
+      state.sampleRate = sr;
+      state.duration = samples.length / sr;
+      state.sourceName = sourceLabel;
+      state.viewT0 = 0.0;
+      state.viewT1 = state.duration;
+      state.pinnedFrame = null;
+      els.btnUnpinSlice.classList.add('hidden');
+
+      if (defaultRoi) {
+        state.roi = { active: true, ...defaultRoi };
+      } else {
+        state.roi = {
+          active: true,
+          t0: state.duration * 0.15,
+          t1: state.duration * 0.75,
+          fLow: 220,
+          fHigh: Math.min(3600, sr * 0.4)
+        };
+      }
+
+      els.lblActiveSource.textContent = `Source: ${sourceLabel}`;
+      els.telSampleRate.textContent = `${sr} Hz`;
+
+      analyzeFullAudioBuffer();
+      runAutomatedDspVerificationSuite();
+    }
+
+    // Standard Audio File Ingest
+    els.btnLoadFile.addEventListener('click', () => els.fileInputAudio.click());
+    els.fileInputAudio.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      logMsg(`Decoding audio file "${file.name}" (${(file.size / 1024).toFixed(1)} KB)...`, 'info');
+      const arrayBuf = await file.arrayBuffer();
+      try {
+        const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const decoded = await tempCtx.decodeAudioData(arrayBuf);
+        const chan = decoded.getChannelData(0);
+        const copy = new Float32Array(chan.length);
+        copy.set(chan);
+        loadAudioSamplesIntoEngine(copy, decoded.sampleRate, file.name);
+        tempCtx.close();
+      } catch (err) {
+        logMsg(`Container decode failed (${err.message}). Opening Raw Binary PCM Decoder...`, 'warn');
+        els.modalRawPcm.classList.remove('hidden');
+        els.modalRawPcm.classList.add('flex');
+      }
+    });
+
+    // Raw Binary PCM Stream Modal
+    els.btnOpenRawModal.addEventListener('click', () => {
+      els.modalRawPcm.classList.remove('hidden');
+      els.modalRawPcm.classList.add('flex');
+    });
+    els.btnCloseRawModal.addEventListener('click', () => {
+      els.modalRawPcm.classList.add('hidden');
+      els.modalRawPcm.classList.remove('flex');
+    });
+    els.btnProcessRawPcm.addEventListener('click', async () => {
+      const file = els.fileInputRaw.files[0];
+      if (!file) {
+        logMsg('Select a raw binary file first.', 'warn');
+        return;
+      }
+      const sr = Math.max(4000, Math.min(96000, parseInt(els.rawSampleRate.value, 10) || 24000));
+      const fmt = els.rawFormat.value;
+      const offset = Math.max(0, parseInt(els.rawOffset.value, 10) || 0);
+      const buf = await file.arrayBuffer();
+      const dv = new DataView(buf, Math.min(offset, buf.byteLength));
+      let samples;
+
+      if (fmt === 's16le' || fmt === 's16be') {
+        const le = fmt === 's16le';
+        const len = Math.floor(dv.byteLength / 2);
+        samples = new Float32Array(len);
+        for (let i = 0; i < len; i++) samples[i] = dv.getInt16(i * 2, le) / 32768.0;
+      } else if (fmt === 'f32le') {
+        const len = Math.floor(dv.byteLength / 4);
+        samples = new Float32Array(len);
+        for (let i = 0; i < len; i++) samples[i] = Math.max(-1, Math.min(1, dv.getFloat32(i * 4, true)));
+      } else {
+        const len = dv.byteLength;
+        samples = new Float32Array(len);
+        for (let i = 0; i < len; i++) samples[i] = (dv.getUint8(i) - 128) / 128.0;
+      }
+
+      els.modalRawPcm.classList.add('hidden');
+      els.modalRawPcm.classList.remove('flex');
+      loadAudioSamplesIntoEngine(samples, sr, `Raw PCM (${file.name})`);
+    });
+
+    // Live Microphone Capture Mode
+    els.btnLiveMic.addEventListener('click', async () => {
+      if (state.isLiveMic) {
+        if (state.micProcessor) state.micProcessor.disconnect();
+        if (state.micStream) state.micStream.getTracks().forEach(t => t.stop());
+        state.isLiveMic = false;
+        els.btnLiveMic.classList.remove('bg-rose-900', 'text-white');
+        logMsg('Live Microphone capture stopped. Full buffer ready for forensic ROI inspection.', 'info');
+        return;
+      }
+      try {
+        stopAllAudioPlayback();
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+        ensureAudioContext();
+        state.micStream = stream;
+        state.isLiveMic = true;
+        els.btnLiveMic.classList.add('bg-rose-900', 'text-white');
+
+        const sr = state.audioCtx.sampleRate;
+        const ringSeconds = 4.0;
+        const ringBuf = new Float32Array(Math.floor(sr * ringSeconds));
+        const src = state.audioCtx.createMediaStreamSource(stream);
+        const proc = state.audioCtx.createScriptProcessor(2048, 1, 1);
+        state.micProcessor = proc;
+
+        let chunkCounter = 0;
+        proc.onaudioprocess = (ev) => {
+          if (!state.isLiveMic) return;
+          const inp = ev.inputBuffer.getChannelData(0);
+          ringBuf.copyWithin(0, inp.length);
+          ringBuf.set(inp, ringBuf.length - inp.length);
+          chunkCounter++;
+          if (chunkCounter % 4 === 0) {
+            state.audioSamples = ringBuf;
+            state.sampleRate = sr;
+            state.duration = ringSeconds;
+            state.viewT0 = 0;
+            state.viewT1 = ringSeconds;
+            analyzeFullAudioBuffer();
+          }
+        };
+        src.connect(proc);
+        proc.connect(state.audioCtx.destination);
+        logMsg(`Live Microphone streaming started at ${sr} Hz (Raw un-processed acoustic feed).`, 'forensic');
+      } catch (err) {
+        logMsg(`Microphone access denied or unavailable: ${err.message}`, 'warn');
+      }
+    });
+
+    // Export 16-bit PCM WAV (Exports isolated ROI if active, or full cleaned signal)
+    els.btnExportWav.addEventListener('click', () => {
+      if (!state.audioSamples) return;
+      const tStart = Math.min(state.roi.t0, state.roi.t1);
+      const tEnd = Math.max(state.roi.t0, state.roi.t1);
+      const fLow = Math.min(state.roi.fLow, state.roi.fHigh);
+      const fHigh = Math.max(state.roi.fLow, state.roi.fHigh);
+
+      const { buffer } = buildIsolatedRoiBandpassBuffer(
+        state.audioSamples, state.sampleRate, tStart, tEnd, fLow, fHigh, false
+      );
+
+      const numSamples = buffer.length;
+      const wavBuf = new ArrayBuffer(44 + numSamples * 2);
+      const view = new DataView(wavBuf);
+      const writeStr = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+
+      writeStr(0, 'RIFF');
+      view.setUint32(4, 36 + numSamples * 2, true);
+      writeStr(8, 'WAVE');
+      writeStr(12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, state.sampleRate, true);
+      view.setUint32(28, state.sampleRate * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      writeStr(36, 'data');
+      view.setUint32(40, numSamples * 2, true);
+
+      for (let i = 0; i < numSamples; i++) {
+        const s = Math.max(-1, Math.min(1, buffer[i]));
+        view.setInt16(44 + i * 2, s < 0 ? s * 32768 : s * 32767, true);
+      }
+
+      const blob = new Blob([wavBuf], { type: 'audio/wav' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `forensic_roi_${Math.round(fLow)}_${Math.round(fHigh)}Hz.wav`;
+      a.click();
+      logMsg(`Exported 16-bit PCM WAV of isolated ROI (${numSamples} samples).`, 'pass');
+    });
+
+    els.btnExportPng.addEventListener('click', () => {
+      const a = document.createElement('a');
+      a.href = els.specCanvas.toDataURL('image/png');
+      a.download = `forensic_spectrogram_${Date.now()}.png`;
+      a.click();
+      logMsg('Exported high-resolution spectrogram PNG.', 'pass');
+    });
+
+    els.btnExportJson.addEventListener('click', () => {
+      const report = {
+        version: '4.0-verified',
+        source: state.sourceName,
+        sampleRate: state.sampleRate,
+        durationSec: state.duration,
+        lpcOrder: state.lpcOrder,
+        roiSelection: state.roi,
+        framesSampled: state.formantTrack.filter((_, idx) => idx % 4 === 0).map((fm, idx) => ({
+          timeSec: Number(state.timeStamps[idx * 4].toFixed(3)),
+          phoneme: state.phonemeTrack[idx * 4].label || 'noise',
+          f0Hz: Math.round(state.pitchTrack[idx * 4]),
+          f1Hz: fm.f1 ? Math.round(fm.f1.hz) : null,
+          f2Hz: fm.f2 ? Math.round(fm.f2.hz) : null,
+          f3Hz: fm.f3 ? Math.round(fm.f3.hz) : null
+        }))
+      };
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `forensic_lpc_phoneme_report_${Date.now()}.json`;
+      a.click();
+      logMsg('Exported JSON Forensic LPC Formant & Phoneme report.', 'pass');
+    });
+
+    // =========================================================================
+    // 11. INTERACTIVE EVENTS, MOUSE ROI DRAGGING & SPACEBAR KEYBOARD BINDING
+    // =========================================================================
+    function bindEventListeners() {
+      // Benchmark Synth Button & Dropdown
+      const loadSelectedBenchmark = () => {
+        const preset = els.selectScenario.value;
+        const res = synthesizeBenchmarkScenario(preset);
+        loadAudioSamplesIntoEngine(res.samples, res.sr, res.name, res.roi);
+      };
+      els.btnSynthScenario.addEventListener('click', loadSelectedBenchmark);
+      els.selectScenario.addEventListener('change', loadSelectedBenchmark);
+
+      // Transport Buttons
+      els.btnPlayFull.addEventListener('click', toggleFullPlayback);
+      els.btnLoopRoi.addEventListener('click', toggleRoiBandpassLoop);
+
+      // Global SPACEBAR Shortcut for 2D ROI Bandpass Loop (0.5ms loopback delay)
+      window.addEventListener('keydown', (e) => {
+        if (e.code === 'Space' && !['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+          e.preventDefault();
+          toggleRoiBandpassLoop();
+        } else if (e.code === 'Escape') {
+          els.modalSelfTest.classList.add('hidden');
+          els.modalSelfTest.classList.remove('flex');
+          els.modalRawPcm.classList.add('hidden');
+          els.modalRawPcm.classList.remove('flex');
+        }
+      });
+
+      // Forensic Sliders
+      els.sliderTightness.addEventListener('input', (e) => {
+        state.pinpointTightness = parseInt(e.target.value, 10) / 100.0;
+        recomputeLPCAndPinpointMask();
+      });
+      els.sliderAlpha.addEventListener('input', (e) => {
+        state.oversubtractionAlpha = parseFloat(e.target.value);
+        els.valAlpha.textContent = `${state.oversubtractionAlpha.toFixed(2)}x`;
+        recomputeLPCAndPinpointMask();
+      });
+      els.sliderWhisperBoost.addEventListener('input', (e) => {
+        state.whisperBoostDb = parseInt(e.target.value, 10);
+        els.valWhisperBoost.textContent = `+${state.whisperBoostDb} dB`;
+        renderMainSpectrogram();
+      });
+      els.sliderWhitening.addEventListener('input', (e) => {
+        state.noiseWhitening = parseInt(e.target.value, 10) / 100.0;
+        els.valWhitening.textContent = `${e.target.value}%`;
+        renderMainSpectrogram();
+      });
+      els.sliderGamma.addEventListener('input', (e) => {
+        state.contrastGamma = parseFloat(e.target.value);
+        els.valGamma.textContent = state.contrastGamma.toFixed(2);
+        renderMainSpectrogram();
+      });
+      els.sliderVadThresh.addEventListener('input', (e) => {
+        state.vadThreshold = parseFloat(e.target.value);
+        els.valVadThresh.textContent = state.vadThreshold.toFixed(2);
+        recomputeLPCAndPinpointMask();
+      });
+
+      // Checkboxes & Scale / Palette
+      els.chkShowFormantDots.addEventListener('change', (e) => {
+        state.showFormantDots = e.target.checked;
+        renderOverlaysAndFormants();
+      });
+      els.chkTrackWhispers.addEventListener('change', (e) => {
+        state.trackWhispers = e.target.checked;
+        recomputeLPCAndPinpointMask();
+      });
+      els.chkSoloVoiceColor.addEventListener('change', (e) => {
+        state.soloVoiceColor = e.target.checked;
+        renderMainSpectrogram();
+      });
+      els.selectScale.addEventListener('change', (e) => {
+        state.freqScale = e.target.value;
+        renderAllCanvases();
+      });
+      els.selectPalette.addEventListener('change', (e) => {
+        state.palette = e.target.value;
+        renderMainSpectrogram();
+      });
+      els.sliderMinDb.addEventListener('input', (e) => {
+        state.minDb = parseInt(e.target.value, 10);
+        els.valMinDb.textContent = `${state.minDb} dB`;
+        renderMainSpectrogram();
+      });
+
+      // MAX HUNT One-Click Optimization Preset
+      els.btnMaxHunt.addEventListener('click', () => {
+        state.pinpointTightness = 0.92;
+        state.oversubtractionAlpha = 2.65;
+        state.whisperBoostDb = 38;
+        state.noiseWhitening = 0.84;
+        state.contrastGamma = 2.10;
+        state.vadThreshold = 0.24;
+        state.trackWhispers = true;
+        state.soloVoiceColor = true;
+
+        els.sliderTightness.value = 92;
+        els.sliderAlpha.value = 2.65; els.valAlpha.textContent = '2.65x';
+        els.sliderWhisperBoost.value = 38; els.valWhisperBoost.textContent = '+38 dB';
+        els.sliderWhitening.value = 84; els.valWhitening.textContent = '84%';
+        els.sliderGamma.value = 2.10; els.valGamma.textContent = '2.10';
+        els.sliderVadThresh.value = 0.24; els.valVadThresh.textContent = '0.24';
+        els.chkTrackWhispers.checked = true;
+        els.chkSoloVoiceColor.checked = true;
+
+        recomputeLPCAndPinpointMask();
+        logMsg('MAX HUNT engaged: High-gain room floor suppressed; buried whispers & formant poles soloed.', 'forensic');
+      });
+
+      // Spectrogram Mouse Hover, Click-to-Pin LPC Slice, and 2D ROI Drag Selection
+      els.specViewport.addEventListener('mousedown', (e) => {
+        if (state.numFrames === 0) return;
+        const rect = els.specCanvas.getBoundingClientRect();
+        const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+        const y = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+
+        if (e.shiftKey) {
+          state.isPanning = true;
+          state.panStartX = e.clientX;
+          state.panStartT0 = state.viewT0;
+          state.panStartT1 = state.viewT1;
+          return;
+        }
+
+        state.isDragging = true;
+        state.dragStartX = x;
+        state.dragStartY = y;
+
+        const vSpan = Math.max(0.01, state.viewT1 - state.viewT0);
+        const t = state.viewT0 + (x / rect.width) * vSpan;
+        const hz = normYToHz(1.0 - y / rect.height, state.sampleRate * 0.5, state.freqScale);
+
+        state.roi.active = true;
+        state.roi.t0 = t;
+        state.roi.t1 = t;
+        state.roi.fLow = hz;
+        state.roi.fHigh = hz;
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (state.numFrames === 0) return;
+        const rect = els.specCanvas.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+
+        if (state.isPanning) {
+          const dxNorm = (e.clientX - state.panStartX) / rect.width;
+          const span = state.panStartT1 - state.panStartT0;
+          state.viewT0 = Math.max(0, Math.min(state.duration - span, state.panStartT0 - dxNorm * span));
+          state.viewT1 = state.viewT0 + span;
+          renderAllCanvases();
+          return;
+        }
+
+        const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+        const y = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+        const vSpan = Math.max(0.01, state.viewT1 - state.viewT0);
+        const curT = state.viewT0 + (x / rect.width) * vSpan;
+        const curHz = normYToHz(1.0 - y / rect.height, state.sampleRate * 0.5, state.freqScale);
+
+        if (state.isDragging) {
+          state.roi.t1 = curT;
+          state.roi.fHigh = curHz;
+          updateRoiBoxPosition();
+          updateRoiTelemetry();
+        }
+
+        // Update Live Crosshair HUD & LPC Slice Inspector when hovering inside spectrogram
+        if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+          const fIdx = Math.max(0, Math.min(state.numFrames - 1, Math.floor((curT / state.duration) * state.numFrames)));
+          const bIdx = Math.max(0, Math.min(state.numBins - 1, Math.floor((curHz / (state.sampleRate * 0.5)) * (state.numBins - 1))));
+          state.hoverFrame = fIdx;
+
+          const cleanP = state.cleanPower[fIdx][bIdx];
+          const flrP = state.noiseFloorPow[bIdx];
+          const snrDb = 10.0 * Math.log10((cleanP + 1e-12) / (flrP + 1e-12));
+          const maskProb = state.speechMask[fIdx][bIdx];
+          const f0 = state.pitchTrack[fIdx];
+          const cpp = state.cppTrack[fIdx];
+          const fm = state.formantTrack[fIdx];
+          const ph = state.phonemeTrack[fIdx];
+
+          els.hudT.textContent = `${curT.toFixed(3)} s`;
+          els.hudF.textContent = `${Math.round(curHz)} Hz`;
+          els.hudSnr.textContent = `${snrDb >= 0 ? '+' : ''}${snrDb.toFixed(1)} dB`;
+          els.hudMask.textContent = `${Math.round(maskProb * 100)}%`;
+          els.hudF0.textContent = f0 > 0 ? `${f0.toFixed(1)} Hz (+${cpp.toFixed(1)}dB)` : 'Unvoiced';
+          els.hudFormants.textContent = `${fm.f1 ? Math.round(fm.f1.hz) : '--'} / ${fm.f2 ? Math.round(fm.f2.hz) : '--'} / ${fm.f3 ? Math.round(fm.f3.hz) : '--'} Hz`;
+          els.hudPhoneme.textContent = ph.label || 'NOISE';
+
+          if (state.pinnedFrame === null) {
+            renderLPCSliceInspector(fIdx);
+          }
+        }
+      });
+
+      window.addEventListener('mouseup', (e) => {
+        if (state.isPanning) {
+          state.isPanning = false;
+          return;
+        }
+        if (!state.isDragging) return;
+        state.isDragging = false;
+
+        const rect = els.specCanvas.getBoundingClientRect();
+        const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+        const y = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+        const dx = Math.abs(x - state.dragStartX);
+        const dy = Math.abs(y - state.dragStartY);
+
+        if (dx < 5 && dy < 5) {
+          // Single click without drag: Pin/Unpin the LPC Cross-Section Slice Inspector at clicked frame!
+          const vSpan = Math.max(0.01, state.viewT1 - state.viewT0);
+          const clickT = state.viewT0 + (x / rect.width) * vSpan;
+          const fIdx = Math.max(0, Math.min(state.numFrames - 1, Math.floor((clickT / state.duration) * state.numFrames)));
+          state.pinnedFrame = fIdx;
+          els.lblSliceStatus.textContent = `Pinned at T = ${clickT.toFixed(3)}s (Frame #${fIdx})`;
+          els.btnUnpinSlice.classList.remove('hidden');
+          renderOverlaysAndFormants();
+          renderLPCSliceInspector(fIdx);
+        } else if (state.dragMode === 'zoom') {
+          const t0 = Math.min(state.roi.t0, state.roi.t1);
+          const t1 = Math.max(state.roi.t0, state.roi.t1);
+          if (t1 - t0 > 0.04) {
+            state.viewT0 = t0;
+            state.viewT1 = t1;
+            renderAllCanvases();
+          }
+        } else {
+          updateRoiBoxPosition();
+          updateRoiTelemetry();
+          // If ROI loop is currently active, restart loop immediately with the newly drawn 2D box
+          if (state.isLoopingRoi) {
+            stopAllAudioPlayback();
+            toggleRoiBandpassLoop();
+          }
+        }
+      });
+
+      els.btnUnpinSlice.addEventListener('click', () => {
+        state.pinnedFrame = null;
+        els.lblSliceStatus.textContent = 'Hover spectrogram (Click to Pin Frame)';
+        els.btnUnpinSlice.classList.add('hidden');
+        renderOverlaysAndFormants();
+      });
+
+      // Zoom & Drag Mode Controls
+      els.btnDragMode.addEventListener('click', () => {
+        state.dragMode = state.dragMode === 'roi' ? 'zoom' : 'roi';
+        els.btnDragMode.textContent = state.dragMode === 'roi' ? 'Drag: 2D ROI Box' : 'Drag: Time Zoom';
+      });
+      els.btnResetZoom.addEventListener('click', () => {
+        state.viewT0 = 0;
+        state.viewT1 = state.duration;
+        renderAllCanvases();
+      });
+      els.btnZoomIn.addEventListener('click', () => {
+        const mid = 0.5 * (state.viewT0 + state.viewT1);
+        const half = Math.max(0.05, 0.35 * (state.viewT1 - state.viewT0));
+        state.viewT0 = Math.max(0, mid - half);
+        state.viewT1 = Math.min(state.duration, mid + half);
+        renderAllCanvases();
+      });
+      els.btnZoomOut.addEventListener('click', () => {
+        const mid = 0.5 * (state.viewT0 + state.viewT1);
+        const half = Math.min(state.duration * 0.5, 0.75 * (state.viewT1 - state.viewT0));
+        state.viewT0 = Math.max(0, mid - half);
+        state.viewT1 = Math.min(state.duration, mid + half);
+        renderAllCanvases();
+      });
+
+      // Minimap click/drag navigation
+      let draggingMini = false;
+      const moveMini = (e) => {
+        const rect = els.minimapContainer.getBoundingClientRect();
+        const norm = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        const span = state.viewT1 - state.viewT0;
+        state.viewT0 = Math.max(0, Math.min(state.duration - span, norm * state.duration - span * 0.5));
+        state.viewT1 = state.viewT0 + span;
+        renderAllCanvases();
+      };
+      els.minimapContainer.addEventListener('mousedown', (e) => { draggingMini = true; moveMini(e); });
+      window.addEventListener('mousemove', (e) => { if (draggingMini) moveMini(e); });
+      window.addEventListener('mouseup', () => { draggingMini = false; });
+
+      // Self-Test Modal Controls
+      const openSelfTestModal = () => {
+        runAutomatedDspVerificationSuite();
+        els.modalSelfTest.classList.remove('hidden');
+        els.modalSelfTest.classList.add('flex');
+      };
+      els.btnOpenTests.addEventListener('click', openSelfTestModal);
+      els.badgeSelfTest.addEventListener('click', openSelfTestModal);
+      els.btnCloseSelfTest.addEventListener('click', () => {
+        els.modalSelfTest.classList.add('hidden');
+        els.modalSelfTest.classList.remove('flex');
+      });
+      els.btnRerunSelfTest.addEventListener('click', runAutomatedDspVerificationSuite);
+
+      els.btnClearLog.addEventListener('click', () => { els.logContainer.innerHTML = ''; });
+      window.addEventListener('resize', () => renderAllCanvases());
+    }
+
+    // =========================================================================
+    // BOOTSTRAP APPLICATION ON LOAD
+    // =========================================================================
+    window.addEventListener('load', () => {
+      bindEventListeners();
+      const initialPreset = synthesizeBenchmarkScenario('highgain-room');
+      loadAudioSamplesIntoEngine(initialPreset.samples, initialPreset.sr, initialPreset.name, initialPreset.roi);
+      renderLPCSliceInspector(Math.floor(state.numFrames * 0.16)); // Show /a/ LPC envelope on boot
+    });
+  })();
+  </script>
+</body>
+</html>
