@@ -1,17 +1,19 @@
 """HTTP REST endpoints for VocalVizard backend."""
 from __future__ import annotations
 
+import struct
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
-from vv_io.reader import ChunkedAudioReader, AudioInfo
+from vv_io.reader import ChunkedAudioReader
 from vv_io.cache import ChunkCache
 
 router = APIRouter()
 
 # ---------------------------------------------------------------------------
-# App-level state (set by server.py after creating the router)
+# App-level state
 # ---------------------------------------------------------------------------
 _current_reader: ChunkedAudioReader | None = None
 _current_cache: ChunkCache | None = None
@@ -61,7 +63,11 @@ async def api_status() -> JSONResponse:
     cache_mb = _current_cache.size_mb() if _current_cache else 0.0
     return JSONResponse({
         "mode": _current_mode,
-        "file_id": _current_reader._info.file_id if _current_reader and _current_reader._info else None,
+        "file_id": (
+            _current_reader._info.file_id
+            if _current_reader and _current_reader._info
+            else None
+        ),
         "progress": 0,
         "cache_size_mb": round(cache_mb, 2),
     })
@@ -69,13 +75,50 @@ async def api_status() -> JSONResponse:
 
 @router.get("/api/chunk/{idx}/stft")
 async def api_chunk_stft(idx: int) -> Response:
-    # Implemented in Task 3 — stub returns 404 until then
-    raise HTTPException(status_code=404, detail="STFT not yet available — Task 3")
+    if _current_reader is None:
+        raise HTTPException(status_code=400, detail="No file open")
+    from dsp.pipeline import STFTPipeline, AnalysisParams
+    import numpy as np
+
+    chunk = _current_reader.read_chunk(idx)
+    pipe = STFTPipeline(AnalysisParams(), _current_reader.target_sr)
+    result = pipe.compute(chunk)
+    # Serialize: raw_power as flat float32 bytes, prepend shape as 2 int32
+    frames, bins = result.raw_power.shape
+    header = struct.pack("<ii", frames, bins)
+    payload = header + result.raw_power.astype(np.float32).tobytes()
+    return Response(content=payload, media_type="application/octet-stream")
 
 
 @router.get("/api/chunk/{idx}/lpc")
 async def api_chunk_lpc(idx: int) -> JSONResponse:
-    raise HTTPException(status_code=404, detail="LPC not yet available — Task 3")
+    if _current_reader is None:
+        raise HTTPException(status_code=400, detail="No file open")
+    from dsp.pipeline import STFTPipeline, AnalysisParams
+    from dsp.lpc import analyze_chunk
+    import dataclasses
+
+    chunk = _current_reader.read_chunk(idx)
+    pipe = STFTPipeline(AnalysisParams(), _current_reader.target_sr)
+    result = pipe.compute(chunk)
+    lpc_list, pitch_list = analyze_chunk(result, _current_reader.target_sr)
+
+    def serialize_pole(pole):
+        if pole is None:
+            return None
+        return {"hz": pole.hz, "bw": pole.bw, "prom": pole.prom, "db": pole.db}
+
+    frames = []
+    for lpc, pitch in zip(lpc_list, pitch_list):
+        frames.append({
+            "f0": pitch.f0,
+            "cpp": pitch.cpp_db,
+            "f1": serialize_pole(lpc.f1),
+            "f2": serialize_pole(lpc.f2),
+            "f3": serialize_pole(lpc.f3),
+            "f4": serialize_pole(lpc.f4),
+        })
+    return JSONResponse({"frames": frames})
 
 
 @router.get("/api/chunk/{idx}/path_a")
