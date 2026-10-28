@@ -1928,11 +1928,13 @@
       const rect = canvas.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0 || state.numFrames === 0) return;
 
-      const w = Math.floor(rect.width);
-      const h = Math.floor(rect.height);
+      const dpr = window.devicePixelRatio || 1;
+      const w = Math.floor(rect.width * dpr);
+      const h = Math.floor(rect.height * dpr);
       canvas.width = w;
       canvas.height = h;
       const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
       const imgData = ctx.createImageData(w, h);
       const pixels = imgData.data;
 
@@ -2054,6 +2056,7 @@
           drawPoleDot(fm.f1, '#fde047');
           drawPoleDot(fm.f2, '#fbbf24');
           drawPoleDot(fm.f3, '#38bdf8');
+          if (fm.f4) drawPoleDot(fm.f4, '#a855f7');
         }
       }
 
@@ -2872,6 +2875,12 @@
       els.lblActiveSource.textContent = `Source: ${sourceLabel}`;
       els.telSampleRate.textContent = `${sr} Hz`;
 
+      // A-03: reset AudioContext if sample rate changed
+      if (state.audioCtx && state.audioCtx.sampleRate !== sr) {
+        state.audioCtx.close();
+        state.audioCtx = null;
+      }
+
       analyzeFullAudioBuffer();
       runAutomatedDspVerificationSuite();
     }
@@ -2886,9 +2895,21 @@
       try {
         const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
         const decoded = await tempCtx.decodeAudioData(arrayBuf);
-        const chan = decoded.getChannelData(0);
-        const copy = new Float32Array(chan.length);
-        copy.set(chan);
+        // A-04: stereo downmix
+        let copy;
+        if (decoded.numberOfChannels > 1) {
+          copy = new Float32Array(decoded.length);
+          for (let c = 0; c < decoded.numberOfChannels; c++) {
+            const ch = decoded.getChannelData(c);
+            for (let i = 0; i < copy.length; i++) copy[i] += ch[i];
+          }
+          for (let i = 0; i < copy.length; i++) copy[i] /= decoded.numberOfChannels;
+          console.log(`Downmixed ${decoded.numberOfChannels} channels to mono.`);
+        } else {
+          const chan = decoded.getChannelData(0);
+          copy = new Float32Array(chan.length);
+          copy.set(chan);
+        }
         loadAudioSamplesIntoEngine(copy, decoded.sampleRate, file.name);
         tempCtx.close();
       } catch (err) {
@@ -2962,13 +2983,26 @@
         const ringSeconds = 4.0;
         const ringBuf = new Float32Array(Math.floor(sr * ringSeconds));
         const src = state.audioCtx.createMediaStreamSource(stream);
-        const proc = state.audioCtx.createScriptProcessor(2048, 1, 1);
-        state.micProcessor = proc;
+
+        const workletCode = `
+class MicProcessor extends AudioWorkletProcessor {
+  process(inputs) {
+    const ch = inputs[0][0];
+    if (ch) this.port.postMessage(ch.slice());
+    return true;
+  }
+}
+registerProcessor('mic-processor', MicProcessor);`;
+        await state.audioCtx.audioWorklet.addModule(
+          URL.createObjectURL(new Blob([workletCode], { type: 'application/javascript' }))
+        );
+        const workletNode = new AudioWorkletNode(state.audioCtx, 'mic-processor');
+        state.micProcessor = workletNode;
 
         let chunkCounter = 0;
-        proc.onaudioprocess = (ev) => {
+        workletNode.port.onmessage = (ev) => {
           if (!state.isLiveMic) return;
-          const inp = ev.inputBuffer.getChannelData(0);
+          const inp = ev.data;
           ringBuf.copyWithin(0, inp.length);
           ringBuf.set(inp, ringBuf.length - inp.length);
           chunkCounter++;
@@ -2981,8 +3015,7 @@
             analyzeFullAudioBuffer();
           }
         };
-        src.connect(proc);
-        proc.connect(state.audioCtx.destination);
+        src.connect(workletNode);
         logMsg(`Live Microphone streaming started at ${sr} Hz (Raw un-processed acoustic feed).`, 'forensic');
       } catch (err) {
         logMsg(`Microphone access denied or unavailable: ${err.message}`, 'warn');
@@ -3231,8 +3264,10 @@
         if (state.isDragging) {
           state.roi.t1 = curT;
           state.roi.fHigh = curHz;
-          updateRoiBoxPosition();
-          updateRoiTelemetry();
+          if (state.dragMode === 'roi') {
+            updateRoiBoxPosition();
+            updateRoiTelemetry();
+          }
         }
 
         // Update Live Crosshair HUD & LPC Slice Inspector when hovering inside spectrogram
@@ -3318,6 +3353,10 @@
       els.btnDragMode.addEventListener('click', () => {
         state.dragMode = state.dragMode === 'roi' ? 'zoom' : 'roi';
         els.btnDragMode.textContent = state.dragMode === 'roi' ? 'Drag: 2D ROI Box' : 'Drag: Time Zoom';
+        // A-07: show/hide ROI selection box based on mode
+        if (state.dragMode === 'zoom') {
+          els.roiSelectionBox.classList.add('hidden');
+        }
       });
       els.btnResetZoom.addEventListener('click', () => {
         state.viewT0 = 0;
