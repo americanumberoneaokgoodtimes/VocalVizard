@@ -94,6 +94,14 @@
 </head>
 <body class="h-screen w-screen flex flex-col">
 
+  <!-- File-load progress bar (fixed, top of viewport) -->
+  <div id="loadProgressWrap" class="hidden fixed top-0 left-0 right-0 z-50 flex flex-col items-center pointer-events-none">
+    <div class="w-full h-1 bg-slate-900">
+      <div id="loadProgressFill" class="h-full bg-cyan-400 transition-none" style="width:0%"></div>
+    </div>
+    <div id="loadProgressLabel" class="mt-1 px-2 py-0.5 bg-slate-900/90 rounded text-[11px] font-mono text-cyan-300 shadow">0%</div>
+  </div>
+
   <!-- TOP NAVIGATION & TELEMETRY HEADER -->
   <header class="h-12 bg-[#070c18] border-b border-slate-800/90 px-3 flex items-center justify-between shrink-0 z-20">
     <div class="flex items-center gap-2.5">
@@ -2885,16 +2893,115 @@
       runAutomatedDspVerificationSuite();
     }
 
+    // ---- Loading progress bar helpers ----
+    function showLoadProgress(pct, label) {
+      const wrap = document.getElementById('loadProgressWrap');
+      const fill = document.getElementById('loadProgressFill');
+      const lbl  = document.getElementById('loadProgressLabel');
+      if (wrap) wrap.classList.remove('hidden');
+      if (fill) fill.style.width = Math.round(pct) + '%';
+      if (lbl)  lbl.textContent = label || Math.round(pct) + '%';
+    }
+    function hideLoadProgress() {
+      document.getElementById('loadProgressWrap')?.classList.add('hidden');
+    }
+
+    // Read a File as ArrayBuffer and report progress (0–50%).
+    function readFileWithProgress(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onprogress = (ev) => {
+          if (ev.lengthComputable)
+            showLoadProgress(ev.loaded / ev.total * 50, `Reading… ${Math.round(ev.loaded / ev.total * 50)}%`);
+        };
+        reader.onload = (ev) => resolve(ev.target.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    // Upload file to server via XHR and report upload progress (0–90%).
+    // Returns parsed JSON response or throws.
+    function uploadFileWithProgress(file) {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/upload');
+        xhr.responseType = 'json';
+        xhr.upload.onprogress = (ev) => {
+          if (ev.lengthComputable)
+            showLoadProgress(ev.loaded / ev.total * 90, `Uploading… ${Math.round(ev.loaded / ev.total * 90)}%`);
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            showLoadProgress(100, '100%');
+            resolve(xhr.response);
+          } else {
+            reject(new Error(xhr.response?.detail || `HTTP ${xhr.status}`));
+          }
+        };
+        xhr.onerror = () => reject(new Error('Upload network error'));
+        const fd = new FormData();
+        fd.append('file', file);
+        xhr.send(fd);
+      });
+    }
+
     // Standard Audio File Ingest
+    const LARGE_FILE_BYTES = 50 * 1024 * 1024; // 50 MB threshold
     els.btnLoadFile.addEventListener('click', () => els.fileInputAudio.click());
     els.fileInputAudio.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      logMsg(`Decoding audio file "${file.name}" (${(file.size / 1024).toFixed(1)} KB)...`, 'info');
-      const arrayBuf = await file.arrayBuffer();
+      const sizeMB = (file.size / 1048576).toFixed(1);
+      e.target.value = '';  // allow re-selecting same file
+
+      if (file.size > LARGE_FILE_BYTES) {
+        // Large file: upload to server, use Python backend for processing
+        logMsg(`Large file (${sizeMB} MB) — uploading to server for chunked processing…`, 'info');
+        showLoadProgress(0, '0%');
+        try {
+          const info = await uploadFileWithProgress(file);
+          serverState.fileId = info.file_id;
+          serverState.numChunks = info.num_chunks;
+          serverState.vadTimeline = [];
+          serverState.chunkReady.clear();
+          document.getElementById('hudT').textContent = `${info.duration_s.toFixed(1)} s`;
+          logMsg(`Server opened: ${info.duration_s.toFixed(1)}s, ${info.sample_rate}Hz, ${info.channels}ch, ${info.num_chunks} chunks.`, 'pass');
+          // Trigger mode setup on the server
+          const mode = document.querySelector('input[name="procMode"]:checked')?.value || 'sweep';
+          sendToServer({ type: 'set_mode', mode });
+        } catch (err) {
+          logMsg(`Upload failed: ${err.message}`, 'warn');
+        } finally {
+          hideLoadProgress();
+        }
+        return;
+      }
+
+      // Small file: decode in browser with progress
+      logMsg(`Reading "${file.name}" (${sizeMB} MB)…`, 'info');
+      showLoadProgress(0, '0%');
+      let arrayBuf;
       try {
+        arrayBuf = await readFileWithProgress(file);
+      } catch (err) {
+        logMsg(`File read error: ${err.message}`, 'warn');
+        hideLoadProgress();
+        return;
+      }
+
+      try {
+        showLoadProgress(55, 'Decoding…');
         const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
+        // decodeAudioData is async but gives no progress — show indeterminate pulses
+        const pulseId = setInterval(() => {
+          const cur = parseFloat(document.getElementById('loadProgressFill')?.style.width || '55');
+          showLoadProgress(Math.min(95, cur + 2), 'Decoding…');
+        }, 200);
         const decoded = await tempCtx.decodeAudioData(arrayBuf);
+        clearInterval(pulseId);
+        showLoadProgress(98, 'Processing…');
+
         // A-04: stereo downmix
         let copy;
         if (decoded.numberOfChannels > 1) {
@@ -2904,18 +3011,20 @@
             for (let i = 0; i < copy.length; i++) copy[i] += ch[i];
           }
           for (let i = 0; i < copy.length; i++) copy[i] /= decoded.numberOfChannels;
-          console.log(`Downmixed ${decoded.numberOfChannels} channels to mono.`);
         } else {
           const chan = decoded.getChannelData(0);
           copy = new Float32Array(chan.length);
           copy.set(chan);
         }
+        showLoadProgress(100, '100%');
         loadAudioSamplesIntoEngine(copy, decoded.sampleRate, file.name);
         tempCtx.close();
       } catch (err) {
-        logMsg(`Container decode failed (${err.message}). Opening Raw Binary PCM Decoder...`, 'warn');
+        logMsg(`Container decode failed (${err.message}). Opening Raw Binary PCM Decoder…`, 'warn');
         els.modalRawPcm.classList.remove('hidden');
         els.modalRawPcm.classList.add('flex');
+      } finally {
+        hideLoadProgress();
       }
     });
 

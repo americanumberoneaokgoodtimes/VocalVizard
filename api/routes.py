@@ -1,11 +1,15 @@
 """HTTP REST endpoints for VocalVizard backend."""
 from __future__ import annotations
 
+import os
 import struct
+import tempfile
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
+
+_UPLOAD_DIR = os.path.join(tempfile.gettempdir(), "vocalvizard_uploads")
 
 from vv_io.reader import ChunkedAudioReader
 from vv_io.cache import ChunkCache
@@ -52,13 +56,44 @@ class OpenFileRequest(BaseModel):
 
 @router.post("/api/open")
 async def api_open(req: OpenFileRequest) -> JSONResponse:
-    import os
     path = os.path.realpath(os.path.expanduser(req.path))
     allowed_root = os.path.realpath(os.path.expanduser("~"))
     if not path.startswith(allowed_root + os.sep) and path != allowed_root:
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Path not permitted")
     reader = ChunkedAudioReader(path)
+    info = reader.open()
+    set_reader(reader)
+    return JSONResponse({
+        "duration_s": info.duration_s,
+        "sample_rate": info.sample_rate,
+        "channels": info.channels,
+        "format": info.format,
+        "file_id": info.file_id,
+        "num_chunks": reader.num_chunks,
+    })
+
+
+@router.post("/api/upload")
+async def api_upload(file: UploadFile = File(...)) -> JSONResponse:
+    """Accept a streamed audio file upload and open it with ChunkedAudioReader."""
+    os.makedirs(_UPLOAD_DIR, exist_ok=True)
+    # Sanitise filename — strip path separators and dot-dot sequences
+    raw_name = os.path.basename(file.filename or "upload.bin").replace("..", "")
+    safe_name = raw_name.strip() or "upload.bin"
+    dest = os.path.join(_UPLOAD_DIR, safe_name)
+
+    try:
+        with open(dest, "wb") as fh:
+            while True:
+                chunk = await file.read(1 << 20)  # 1 MB at a time
+                if not chunk:
+                    break
+                fh.write(chunk)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {exc}")
+
+    reader = ChunkedAudioReader(dest)
     info = reader.open()
     set_reader(reader)
     return JSONResponse({
