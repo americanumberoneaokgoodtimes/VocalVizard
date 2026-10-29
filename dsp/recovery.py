@@ -159,10 +159,9 @@ def build_path_b(
 
     target_len = len(path_a_samples)
     num_frames = len(lpc_results)
-    hop = params.path_b_threshold if hasattr(params, "path_b_threshold") else 0.28
 
     # Threshold for "has evidence"
-    threshold = params.path_b_threshold
+    threshold = getattr(params, "path_b_threshold", 0.28)
 
     has_evidence = [
         (lpc_results[i].f1 is not None and lpc_results[i].f1.prom >= threshold)

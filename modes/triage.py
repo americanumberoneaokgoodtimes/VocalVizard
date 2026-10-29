@@ -57,10 +57,10 @@ class TriageMode(BaseMode):
             return
 
         # Run Dive in a thread pool to avoid blocking the event loop
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await ws_send({"type": "chunk_progress", "chunk_idx": chunk_idx, "pct": 0})
 
-        result = await loop.run_in_executor(None, self._dive, chunk_idx, ws_send)
+        result = await loop.run_in_executor(None, self._dive, chunk_idx)
         self._cache.put(cache_key, result)
         await ws_send({"type": "chunk_ready", "chunk_idx": chunk_idx, "cached": False})
 
@@ -77,7 +77,7 @@ class TriageMode(BaseMode):
         """Iterate all chunks, compute VAD scores, stream progress messages."""
         from dsp.vad import compute_vad_chunk
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         num_chunks = self._reader.num_chunks
         vad_timeline = []
 
@@ -118,7 +118,7 @@ class TriageMode(BaseMode):
     # Dive (synchronous — called in thread pool)
     # ------------------------------------------------------------------
 
-    def _dive(self, chunk_idx: int, ws_send: Callable) -> dict:
+    def _dive(self, chunk_idx: int) -> dict:
         """Run full pipeline on a single chunk. Returns a summary dict."""
         from dsp.pipeline import STFTPipeline
         from dsp.lpc import analyze_chunk

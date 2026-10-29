@@ -52,7 +52,13 @@ class OpenFileRequest(BaseModel):
 
 @router.post("/api/open")
 async def api_open(req: OpenFileRequest) -> JSONResponse:
-    reader = ChunkedAudioReader(req.path)
+    import os
+    path = os.path.realpath(os.path.expanduser(req.path))
+    allowed_root = os.path.realpath(os.path.expanduser("~"))
+    if not path.startswith(allowed_root + os.sep) and path != allowed_root:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Path not permitted")
+    reader = ChunkedAudioReader(path)
     info = reader.open()
     set_reader(reader)
     return JSONResponse({
@@ -80,8 +86,16 @@ async def api_status() -> JSONResponse:
     })
 
 
+def _check_chunk_idx(idx: int) -> None:
+    if _current_reader is None:
+        raise HTTPException(status_code=400, detail="No file open")
+    if not (0 <= idx < _current_reader.num_chunks):
+        raise HTTPException(status_code=400, detail=f"chunk_idx {idx} out of range")
+
+
 @router.get("/api/chunk/{idx}/stft")
 async def api_chunk_stft(idx: int) -> Response:
+    _check_chunk_idx(idx)
     if _current_reader is None:
         raise HTTPException(status_code=400, detail="No file open")
     import numpy as np
@@ -98,8 +112,7 @@ async def api_chunk_stft(idx: int) -> Response:
 
 @router.get("/api/chunk/{idx}/lpc")
 async def api_chunk_lpc(idx: int) -> JSONResponse:
-    if _current_reader is None:
-        raise HTTPException(status_code=400, detail="No file open")
+    _check_chunk_idx(idx)
     from dsp.pipeline import STFTPipeline, AnalysisParams
     from dsp.lpc import analyze_chunk
 
@@ -128,8 +141,7 @@ async def api_chunk_lpc(idx: int) -> JSONResponse:
 
 @router.get("/api/chunk/{idx}/path_a")
 async def api_chunk_path_a(idx: int) -> Response:
-    if _current_reader is None:
-        raise HTTPException(status_code=400, detail="No file open")
+    _check_chunk_idx(idx)
     import numpy as np
     from dsp.recovery import build_path_a, RecoveryParams
 
@@ -147,8 +159,7 @@ async def api_chunk_path_a(idx: int) -> Response:
 
 @router.get("/api/chunk/{idx}/path_b")
 async def api_chunk_path_b(idx: int) -> Response:
-    if _current_reader is None:
-        raise HTTPException(status_code=400, detail="No file open")
+    _check_chunk_idx(idx)
     import numpy as np
     from dsp.pipeline import STFTPipeline, AnalysisParams
     from dsp.lpc import analyze_chunk

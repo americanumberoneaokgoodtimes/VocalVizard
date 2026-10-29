@@ -47,7 +47,7 @@ class AtlasMode(BaseMode):
         self, chunk_idx: int, priority: str, ws_send: Callable
     ) -> None:
         """Deliver tiles progressively: zoom 1 → 2 → 3."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         file_id = self._reader._info.file_id if self._reader._info else "unknown"
 
         for zoom in (1, 2, 3):
@@ -78,7 +78,7 @@ class AtlasMode(BaseMode):
     async def _scout_pass(self, ws_send: Callable) -> None:
         from dsp.vad import compute_vad_chunk
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         num_chunks = self._reader.num_chunks
         file_id = self._reader._info.file_id if self._reader._info else "unknown"
 

@@ -55,10 +55,19 @@ class WebSocketManager:
         await ws.send_json({"type": "pong"})
 
     async def _handle_open_file(self, ws: WebSocket, msg: dict) -> None:
+        import os
         from vv_io.reader import ChunkedAudioReader
         from api.routes import set_reader
 
-        path = msg.get("path", "")
+        raw_path = msg.get("path", "")
+        if not raw_path:
+            await ws.send_json({"type": "error", "message": "path is required"})
+            return
+        path = os.path.realpath(os.path.expanduser(raw_path))
+        allowed_root = os.path.realpath(os.path.expanduser("~"))
+        if not path.startswith(allowed_root + os.sep) and path != allowed_root:
+            await ws.send_json({"type": "error", "message": "Path not permitted"})
+            return
         try:
             reader = ChunkedAudioReader(path)
             info = reader.open()
@@ -151,6 +160,10 @@ class WebSocketManager:
             await ws.send_json({"type": "error", "message": "No active mode"})
             return
         chunk_idx = int(msg.get("chunk_idx", 0))
+        from api.routes import _current_reader
+        if _current_reader is not None and not (0 <= chunk_idx < _current_reader.num_chunks):
+            await ws.send_json({"type": "error", "message": f"chunk_idx {chunk_idx} out of range"})
+            return
         priority = msg.get("priority", "normal")
         send = _make_sender(ws)
         await _current_mode.on_chunk_requested(chunk_idx, priority, send)

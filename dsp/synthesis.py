@@ -102,24 +102,20 @@ class KlattSynthesizer:
         return diff.astype(np.float32)
 
     def _rosenberg_pulse(self, f0: float, num_samples: int) -> np.ndarray:
-        """Generate a Rosenberg B glottal pulse train."""
-        period = self._sr / f0
+        """Generate a Rosenberg B glottal pulse train using a phase accumulator
+        to avoid the ~9-cent pitch drift caused by integer period truncation."""
         pulse = np.zeros(num_samples, dtype=np.float64)
-        t_open = 0.6 * period  # open phase
-        t_pos = 0.0
-        sample_in_period = 0
+        phase = 0.0           # continuous phase in [0, 1)
+        phase_inc = f0 / self._sr
         for i in range(num_samples):
-            pos = sample_in_period / period
+            pos = phase
             if pos < 0.6:
-                # Rising: 0.5 * (1 - cos(π * pos / 0.6))
                 pulse[i] = 0.5 * (1.0 - math.cos(math.pi * pos / 0.6))
             elif pos < 1.0:
-                # Falling
-                pulse[i] = 0.5 * (1.0 - math.cos(math.pi * (pos - 0.6) / 0.4))
-                pulse[i] = 1.0 - pulse[i]
-            sample_in_period += 1
-            if sample_in_period >= int(period):
-                sample_in_period = 0
+                pulse[i] = 1.0 - 0.5 * (1.0 - math.cos(math.pi * (pos - 0.6) / 0.4))
+            phase += phase_inc
+            if phase >= 1.0:
+                phase -= 1.0
         return pulse
 
 

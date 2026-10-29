@@ -51,6 +51,7 @@ class SweepMode(BaseMode):
         self._cancelled = False
         self._queue = asyncio.PriorityQueue()
         self._queued = set()
+        self._processed: set = set()  # guards against double-counting
         self._executor = ThreadPoolExecutor(max_workers=self._num_workers)
 
         for chunk_idx in range(reader.num_chunks):
@@ -78,7 +79,7 @@ class SweepMode(BaseMode):
     # ------------------------------------------------------------------
 
     async def _sweep_loop(self, ws_send: Callable) -> None:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         num_chunks = self._reader.num_chunks
         completed = 0
 
@@ -98,8 +99,9 @@ class SweepMode(BaseMode):
                 if self._cache.get(cache_key) is not None:
                     # Already processed (e.g., duplicate priority insertion)
                     await ws_send({"type": "chunk_ready", "chunk_idx": chunk_idx, "cached": True})
-                    if chunk_idx in self._queued:
+                    if chunk_idx in self._queued and chunk_idx not in self._processed:
                         self._queued.discard(chunk_idx)
+                        self._processed.add(chunk_idx)
                         completed += 1
                         await ws_send({
                             "type": "sweep_progress",
@@ -123,8 +125,12 @@ class SweepMode(BaseMode):
                     return
 
                 self._cache.put(cache_key, result)
-                self._queued.discard(chunk_idx)
-                completed += 1
+                if chunk_idx not in self._processed:
+                    self._queued.discard(chunk_idx)
+                    self._processed.add(chunk_idx)
+                    completed += 1
+                else:
+                    self._queued.discard(chunk_idx)
 
                 await ws_send({"type": "chunk_ready", "chunk_idx": chunk_idx, "cached": False})
                 await ws_send({
